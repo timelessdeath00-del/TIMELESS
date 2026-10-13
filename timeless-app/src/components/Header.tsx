@@ -66,6 +66,16 @@ export default function Header({ onToggleSidebar, isSidebarExpanded }: HeaderPro
           },
           { onConflict: 'id' }
         ).then(() => {});
+      } else {
+        // Check for local demo user session
+        try {
+          const demo = localStorage.getItem('timeless_demo_user');
+          if (demo) {
+            setUser(JSON.parse(demo));
+          }
+        } catch {
+          // ignore
+        }
       }
     });
 
@@ -94,7 +104,16 @@ export default function Header({ onToggleSidebar, isSidebarExpanded }: HeaderPro
           { onConflict: 'id' }
         ).then(() => {});
       } else {
-        setUser(null);
+        try {
+          const demo = localStorage.getItem('timeless_demo_user');
+          if (demo) {
+            setUser(JSON.parse(demo));
+          } else {
+            setUser(null);
+          }
+        } catch {
+          setUser(null);
+        }
       }
     });
 
@@ -194,7 +213,24 @@ export default function Header({ onToggleSidebar, isSidebarExpanded }: HeaderPro
     } catch (err) {
       console.error('Logout error:', err);
     }
+    try {
+      localStorage.removeItem('timeless_demo_user');
+    } catch {}
     setUser(null);
+  };
+
+  const handleDemoLogin = () => {
+    const demoUser = {
+      name: 'Player One',
+      email: 'player.one@timelessgames.com',
+      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80',
+    };
+    try {
+      localStorage.setItem('timeless_demo_user', JSON.stringify(demoUser));
+    } catch {}
+    setUser(demoUser);
+    setIsAuthModalOpen(false);
+    router.push('/dashboard');
   };
 
   return (
@@ -411,6 +447,24 @@ export default function Header({ onToggleSidebar, isSidebarExpanded }: HeaderPro
                 />
               </svg>
               <span>Continue with Google</span>
+            </button>
+
+            {/* Instant Demo Sign-in */}
+            <div className="relative my-4">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-[#26263B]"></div>
+              </div>
+              <div className="relative flex justify-center text-[10px] uppercase">
+                <span className="bg-[#171726] px-2 text-zinc-500 font-bold">Or quick test</span>
+              </div>
+            </div>
+
+            <button
+              onClick={handleDemoLogin}
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-full bg-[#26263B] text-zinc-200 font-bold text-xs hover:bg-[#35354e] hover:text-white transition-all border border-[#3b3b55]"
+            >
+              <Sparkles className="w-4 h-4 text-amber-400" />
+              <span>Instant Test Sign-In (Player One)</span>
             </button>
 
             <p className="text-[11px] text-zinc-500 mt-4">

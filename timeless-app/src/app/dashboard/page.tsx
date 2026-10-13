@@ -34,6 +34,9 @@ import {
   RefreshCw,
   Sliders,
   Layers,
+  AlertTriangle,
+  X,
+  Code2,
 } from 'lucide-react';
 import Header from '@/components/Header';
 import Sidebar from '@/components/Sidebar';
@@ -64,18 +67,66 @@ const AVATAR_PRESETS = [
   { id: 'golden-champ', name: 'Golden Champion', url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80' },
 ];
 
+const SETUP_SQL_CODE = `-- 1. PROFILES TABLE
+create table if not exists public.profiles (
+  id uuid references auth.users on delete cascade primary key,
+  email text unique not null,
+  display_name text,
+  avatar_url text,
+  bio text,
+  favorite_genre text,
+  role text default 'user' check (role in ('user', 'admin')),
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+-- 2. ENABLE RLS
+alter table public.profiles enable row level security;
+create policy "Public profiles viewable" on public.profiles for select using (true);
+create policy "Users can insert own profile" on public.profiles for insert with check (auth.uid() = id);
+create policy "Users can update own profile" on public.profiles for update using (auth.uid() = id);
+
+-- 3. AUTO PROFILE TRIGGER
+create or replace function public.handle_new_user()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.profiles (id, email, display_name, avatar_url, role)
+  values (
+    new.id,
+    new.email,
+    coalesce(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)),
+    coalesce(new.raw_user_meta_data->>'avatar_url', new.raw_user_meta_data->>'picture', ''),
+    'user'
+  )
+  on conflict (id) do update set
+    email = excluded.email,
+    display_name = coalesce(excluded.display_name, public.profiles.display_name),
+    avatar_url = coalesce(excluded.avatar_url, public.profiles.avatar_url),
+    updated_at = timezone('utc'::text, now());
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created after insert on auth.users for each row execute procedure public.handle_new_user();`;
+
 function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialTab = searchParams.get('tab') || 'overview';
+  const authErrorParam = searchParams.get('auth_error');
 
   const [activeTab, setActiveTab] = useState<'overview' | 'library' | 'achievements' | 'settings'>(
-    initialTab as any || 'overview'
+    (initialTab as any) || 'overview'
   );
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isDemoUser, setIsDemoUser] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [authErrorMessage, setAuthErrorMessage] = useState(authErrorParam || '');
+  const [tableMissing, setTableMissing] = useState(false);
+  const [copiedSql, setCopiedSql] = useState(false);
 
   // Profile Form state
   const [displayName, setDisplayName] = useState('');
@@ -96,6 +147,8 @@ function DashboardContent() {
     if (tabParam && ['overview', 'library', 'achievements', 'settings'].includes(tabParam)) {
       setActiveTab(tabParam as any);
     }
+    const err = searchParams.get('auth_error');
+    if (err) setAuthErrorMessage(decodeURIComponent(err));
   }, [searchParams]);
 
   // Load auth state & Supabase profile
@@ -108,6 +161,7 @@ function DashboardContent() {
         if (authData?.user) {
           const authUser = authData.user;
           setIsLoggedIn(true);
+          setIsDemoUser(false);
 
           // Query Supabase 'profiles' table
           const { data: dbProfile, error: profileErr } = await supabase
@@ -115,6 +169,10 @@ function DashboardContent() {
             .select('*')
             .eq('id', authUser.id)
             .maybeSingle();
+
+          if (profileErr && profileErr.message.includes('profiles')) {
+            setTableMissing(true);
+          }
 
           const name =
             dbProfile?.display_name ||
@@ -141,7 +199,7 @@ function DashboardContent() {
             favoriteGenre: genre,
             role: dbProfile?.role || 'user',
             createdAt: authUser.created_at,
-            isSynced: true,
+            isSynced: !profileErr,
           });
 
           setDisplayName(name);
@@ -150,7 +208,7 @@ function DashboardContent() {
           setSelectedAvatar(avatar);
 
           // If dbProfile didn't exist yet in Supabase, create it now
-          if (!dbProfile) {
+          if (!dbProfile && !profileErr) {
             await supabase.from('profiles').upsert(
               {
                 id: authUser.id,
@@ -163,20 +221,48 @@ function DashboardContent() {
             );
           }
         } else {
-          setIsLoggedIn(false);
-          const guestAvatar = AVATAR_PRESETS[1].url;
-          setUser({
-            id: 'guest',
-            name: 'Guest Player',
-            email: 'Sign in with Google to sync save data',
-            avatar: guestAvatar,
-            bio: 'Browsing in guest mode. Sign in with Google to save favorites and unlock achievements!',
-            favoriteGenre: 'Action',
-            role: 'guest',
-            isSynced: false,
-          });
-          setDisplayName('Guest Player');
-          setSelectedAvatar(guestAvatar);
+          // Check for demo user session
+          let demoData: any = null;
+          try {
+            const stored = localStorage.getItem('timeless_demo_user');
+            if (stored) demoData = JSON.parse(stored);
+          } catch {
+            // ignore
+          }
+
+          if (demoData) {
+            setIsLoggedIn(true);
+            setIsDemoUser(true);
+            setUser({
+              id: 'demo-player-001',
+              name: demoData.name || 'Player One',
+              email: demoData.email || 'player.one@timelessgames.com',
+              avatar: demoData.avatar || AVATAR_PRESETS[1].url,
+              bio: demoData.bio || 'Testing Timeless Games dashboard in quick play mode!',
+              favoriteGenre: demoData.favoriteGenre || 'Action',
+              role: 'pro-gamer',
+              isSynced: false,
+            });
+            setDisplayName(demoData.name || 'Player One');
+            setBio(demoData.bio || 'Testing Timeless Games dashboard in quick play mode!');
+            setSelectedAvatar(demoData.avatar || AVATAR_PRESETS[1].url);
+          } else {
+            setIsLoggedIn(false);
+            setIsDemoUser(false);
+            const guestAvatar = AVATAR_PRESETS[1].url;
+            setUser({
+              id: 'guest',
+              name: 'Guest Player',
+              email: 'Sign in to sync cloud progress',
+              avatar: guestAvatar,
+              bio: 'Browsing in guest mode. Sign in to customize your profile, unlock achievements, and save bookmarks!',
+              favoriteGenre: 'Action',
+              role: 'guest',
+              isSynced: false,
+            });
+            setDisplayName('Guest Player');
+            setSelectedAvatar(guestAvatar);
+          }
         }
       } catch (err) {
         console.error('Error fetching user profile:', err);
@@ -192,18 +278,6 @@ function DashboardContent() {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         fetchUserProfile();
-      } else {
-        setIsLoggedIn(false);
-        setUser({
-          id: 'guest',
-          name: 'Guest Player',
-          email: 'Sign in with Google to sync save data',
-          avatar: AVATAR_PRESETS[1].url,
-          bio: 'Browsing in guest mode.',
-          favoriteGenre: 'Action',
-          role: 'guest',
-          isSynced: false,
-        });
       }
     });
 
@@ -257,31 +331,77 @@ function DashboardContent() {
     }
   };
 
+  const handleDemoSignIn = () => {
+    const demo = {
+      name: 'Player One',
+      email: 'player.one@timelessgames.com',
+      avatar: AVATAR_PRESETS[1].url,
+      bio: 'Testing Timeless Games dashboard in quick play mode!',
+      favoriteGenre: 'Action',
+    };
+    try {
+      localStorage.setItem('timeless_demo_user', JSON.stringify(demo));
+    } catch {}
+    setUser({
+      id: 'demo-player-001',
+      name: demo.name,
+      email: demo.email,
+      avatar: demo.avatar,
+      bio: demo.bio,
+      favoriteGenre: demo.favoriteGenre,
+      role: 'pro-gamer',
+      isSynced: false,
+    });
+    setIsLoggedIn(true);
+    setIsDemoUser(true);
+    setDisplayName(demo.name);
+    setBio(demo.bio);
+    setSelectedAvatar(demo.avatar);
+    setAuthErrorMessage('');
+  };
+
   const handleLogout = async () => {
     try {
       const supabase = createClient();
       await supabase.auth.signOut();
-      setIsLoggedIn(false);
     } catch (err) {
       console.error(err);
     }
+    try {
+      localStorage.removeItem('timeless_demo_user');
+    } catch {}
+    setIsLoggedIn(false);
+    setIsDemoUser(false);
     router.push('/');
   };
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || user.id === 'guest') {
-      handleGoogleLogin();
-      return;
-    }
+    if (!user) return;
 
     setIsSaving(true);
     setSaveSuccessMessage('');
 
+    if (isDemoUser) {
+      const updated = {
+        name: displayName.trim() || 'Player One',
+        email: user.email,
+        avatar: selectedAvatar,
+        bio,
+        favoriteGenre,
+      };
+      try {
+        localStorage.setItem('timeless_demo_user', JSON.stringify(updated));
+      } catch {}
+      setUser((prev) => (prev ? { ...prev, ...updated } : null));
+      setSaveSuccessMessage('Demo profile updated successfully!');
+      setTimeout(() => setSaveSuccessMessage(''), 4000);
+      setIsSaving(false);
+      return;
+    }
+
     try {
       const supabase = createClient();
-
-      // Payload for Supabase profiles update
       const updatePayload: Record<string, any> = {
         display_name: displayName.trim() || 'Player',
         avatar_url: selectedAvatar,
@@ -311,7 +431,7 @@ function DashboardContent() {
         setSaveSuccessMessage('Profile saved successfully to Supabase database!');
         setTimeout(() => setSaveSuccessMessage(''), 4000);
       } else {
-        // Fallback update display_name only if extra columns aren't migrated
+        // Fallback update display_name only
         await supabase
           .from('profiles')
           .update({
@@ -348,6 +468,12 @@ function DashboardContent() {
     }
   };
 
+  const handleCopySql = () => {
+    navigator.clipboard.writeText(SETUP_SQL_CODE);
+    setCopiedSql(true);
+    setTimeout(() => setCopiedSql(false), 2500);
+  };
+
   const handleClearHistory = () => {
     if (confirm('Are you sure you want to clear your local game history?')) {
       localStorage.removeItem('timeless_history');
@@ -364,7 +490,7 @@ function DashboardContent() {
     : 'Oct 2026';
 
   const achievements = [
-    { title: 'Google Verified', desc: 'Connected account via Google OAuth', icon: ShieldCheck, unlocked: isLoggedIn, tier: 'Gold' },
+    { title: 'Google Verified', desc: 'Connected account via Google OAuth', icon: ShieldCheck, unlocked: isLoggedIn && !isDemoUser, tier: 'Gold' },
     { title: 'First Blood', desc: 'Played your first game', icon: Zap, unlocked: recentGames.length >= 1, tier: 'Bronze' },
     { title: 'Endless Explorer', desc: 'Played Temple Run 2 & Subway Surfers', icon: Flame, unlocked: recentGames.length >= 2, tier: 'Silver' },
     { title: 'Sharpshooter', desc: 'Tested Ragdoll Archers & Action games', icon: Award, unlocked: true, tier: 'Silver' },
@@ -397,6 +523,93 @@ function DashboardContent() {
             <span className="text-zinc-200 font-bold">Player Profile & Dashboard</span>
           </nav>
 
+          {/* AUTH ERROR / DIAGNOSTIC ALERT BANNER */}
+          {authErrorMessage && (
+            <div className="mb-6 p-5 rounded-3xl bg-amber-500/10 border border-amber-500/30 text-zinc-200 shadow-xl relative animate-in fade-in duration-200">
+              <button
+                onClick={() => setAuthErrorMessage('')}
+                className="absolute top-4 right-4 p-1 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <div className="flex items-start gap-3.5">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div className="flex-1 pr-6">
+                  <h3 className="text-sm font-black text-white flex items-center gap-2">
+                    <span>Google Sign-In Configuration Check</span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300">
+                      Error: {authErrorMessage}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-zinc-300 mt-1">
+                    Google refused to exchange the authorization code with Supabase. Here is how to complete the Google connection:
+                  </p>
+                  <ol className="mt-2 text-xs text-zinc-400 space-y-1 list-decimal list-inside font-medium">
+                    <li>
+                      <strong className="text-white">Google Cloud Console Redirect URI:</strong> Ensure Authorized Redirect URIs has{' '}
+                      <code className="text-[#A78BFA] bg-black/40 px-1 rounded font-mono">
+                        https://lduxhgfpiwcsplwywrpe.supabase.co/auth/v1/callback
+                      </code>{' '}
+                      (no trailing slash).
+                    </li>
+                    <li>
+                      <strong className="text-white">OAuth Consent Screen:</strong> If your app is in <em>Testing</em> mode, add your Gmail under{' '}
+                      <em>Test users</em>.
+                    </li>
+                    <li>
+                      <strong className="text-white">Supabase Dashboard:</strong> Verify Client ID and Secret in <em>Authentication &gt; Providers &gt; Google</em>.
+                    </li>
+                  </ol>
+                  <div className="mt-3 flex items-center gap-3">
+                    <button
+                      onClick={handleDemoSignIn}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[#7B3FF2] text-white text-xs font-bold hover:bg-[#905CF6] transition-colors"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                      <span>Instant Test Sign-In</span>
+                    </button>
+                    <button
+                      onClick={handleGoogleLogin}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-[#26263B] text-zinc-200 text-xs font-bold hover:text-white transition-colors"
+                    >
+                      <span>Retry Google Login</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* MISSING PROFILES TABLE BANNER */}
+          {tableMissing && (
+            <div className="mb-6 p-5 rounded-3xl bg-indigo-500/10 border border-indigo-500/30 text-zinc-200 shadow-xl animate-in fade-in duration-200">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
+                    <Database className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-white">
+                      Supabase Table <code className="text-[#A78BFA]">public.profiles</code> Not Created Yet
+                    </h3>
+                    <p className="text-xs text-zinc-400 mt-0.5">
+                      Run the SQL migration in your Supabase SQL Editor so user info saves into Postgres.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleCopySql}
+                  className="flex items-center gap-2 px-4 py-2 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition-colors shrink-0"
+                >
+                  {copiedSql ? <Check className="w-4 h-4 text-emerald-300" /> : <Copy className="w-4 h-4" />}
+                  <span>{copiedSql ? 'SQL Copied to Clipboard!' : 'Copy SQL Script'}</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* GUEST BANNER IF NOT LOGGED IN */}
           {!isLoggedIn && (
             <div className="mb-6 p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-[#7B3FF2]/20 via-[#EC4899]/15 to-[#7B3FF2]/20 border border-[#7B3FF2]/40 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl animate-in fade-in duration-300">
@@ -413,30 +626,39 @@ function DashboardContent() {
                   </p>
                 </div>
               </div>
-              <button
-                onClick={handleGoogleLogin}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-white text-zinc-950 font-black text-xs hover:bg-zinc-100 transition-all shadow-md active:scale-95 shrink-0"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24">
-                  <path
-                    fill="#4285F4"
-                    d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.66v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.15z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.94H1.24v3.15C3.26 21.36 7.34 24 12 24z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M5.28 14.26c-.25-.72-.38-1.49-.38-2.26s.13-1.54.38-2.26V6.59H1.24C.45 8.16 0 9.94 0 12s.45 3.84 1.24 5.41l4.04-3.15z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.24 6.59l4.04 3.15c.95-2.84 3.6-4.99 6.72-4.99z"
-                  />
-                </svg>
-                <span>Continue with Google</span>
-              </button>
+              <div className="flex items-center gap-2.5 flex-wrap justify-center">
+                <button
+                  onClick={handleGoogleLogin}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-white text-zinc-950 font-black text-xs hover:bg-zinc-100 transition-all shadow-md active:scale-95 shrink-0"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24">
+                    <path
+                      fill="#4285F4"
+                      d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.66v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.15z"
+                    />
+                    <path
+                      fill="#34A853"
+                      d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.94H1.24v3.15C3.26 21.36 7.34 24 12 24z"
+                    />
+                    <path
+                      fill="#FBBC05"
+                      d="M5.28 14.26c-.25-.72-.38-1.49-.38-2.26s.13-1.54.38-2.26V6.59H1.24C.45 8.16 0 9.94 0 12s.45 3.84 1.24 5.41l4.04-3.15z"
+                    />
+                    <path
+                      fill="#EA4335"
+                      d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.24 6.59l4.04 3.15c.95-2.84 3.6-4.99 6.72-4.99z"
+                    />
+                  </svg>
+                  <span>Continue with Google</span>
+                </button>
+                <button
+                  onClick={handleDemoSignIn}
+                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-[#26263B] text-zinc-200 font-bold text-xs hover:bg-[#35354e] hover:text-white transition-all border border-[#3b3b55]"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Instant Test Sign-In</span>
+                </button>
+              </div>
             </div>
           )}
 
@@ -464,7 +686,6 @@ function DashboardContent() {
                       </div>
                     )}
                   </div>
-                  {/* Floating Level Tag */}
                   <div className="absolute -bottom-2 -right-2 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-[#7B3FF2] to-[#EC4899] text-white text-[11px] font-black shadow-md border border-[#0F0F1A]">
                     LVL 8
                   </div>
@@ -478,13 +699,18 @@ function DashboardContent() {
                         <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
                           {user?.name}
                         </h1>
-                        {isLoggedIn ? (
+                        {isLoggedIn && !isDemoUser ? (
                           <span
                             className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-xs font-bold"
-                            title="Verified Supabase User"
+                            title="Verified Google User"
                           >
                             <ShieldCheck className="w-3.5 h-3.5" />
                             <span>Google Verified</span>
+                          </span>
+                        ) : isDemoUser ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-purple-500/20 border border-purple-500/40 text-[#A78BFA] text-xs font-bold">
+                            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                            <span>Demo Player Active</span>
                           </span>
                         ) : (
                           <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-bold">
@@ -572,7 +798,7 @@ function DashboardContent() {
                   }`}
                 >
                   <Trophy className="w-4 h-4" />
-                  <span>Achievements ({achievements.filter(a => a.unlocked).length}/{achievements.length})</span>
+                  <span>Achievements ({achievements.filter((a) => a.unlocked).length}/{achievements.length})</span>
                 </button>
 
                 <button
@@ -946,7 +1172,7 @@ function DashboardContent() {
                       className="flex items-center gap-2 px-6 py-2.5 rounded-full bg-[#7B3FF2] hover:bg-[#905CF6] text-white text-xs font-black shadow-lg shadow-[#7B3FF2]/30 transition-all active:scale-95 disabled:opacity-50"
                     >
                       <Save className="w-4 h-4" />
-                      <span>{isSaving ? 'Saving to Supabase...' : 'Save Changes'}</span>
+                      <span>{isSaving ? 'Saving...' : 'Save Profile'}</span>
                     </button>
                   </div>
                 </form>
@@ -966,7 +1192,7 @@ function DashboardContent() {
                 </div>
 
                 <p className="text-xs text-zinc-400 mb-6">
-                  Your authenticated Google credentials and gamer handles are saved directly in Supabase Postgres under the <code className="text-[#A78BFA] bg-[#0F0F1A] px-1.5 py-0.5 rounded">public.profiles</code> table.
+                  Target Supabase Postgres project: <code className="text-[#A78BFA] bg-[#0F0F1A] px-1.5 py-0.5 rounded font-mono">https://lduxhgfpiwcsplwywrpe.supabase.co</code>
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
@@ -985,27 +1211,21 @@ function DashboardContent() {
                   </div>
 
                   <div className="p-4 rounded-2xl bg-[#0F0F1A] border border-[#26263B]">
-                    <span className="text-zinc-500 font-semibold block mb-1">Authentication Method</span>
+                    <span className="text-zinc-500 font-semibold block mb-1">Session Mode</span>
                     <span className="text-zinc-200 font-bold flex items-center gap-2">
-                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
-                        <path
-                          fill="#4285F4"
-                          d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.66v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.15z"
-                        />
-                        <path
-                          fill="#34A853"
-                          d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.94H1.24v3.15C3.26 21.36 7.34 24 12 24z"
-                        />
-                        <path
-                          fill="#FBBC05"
-                          d="M5.28 14.26c-.25-.72-.38-1.49-.38-2.26s.13-1.54.38-2.26V6.59H1.24C.45 8.16 0 9.94 0 12s.45 3.84 1.24 5.41l4.04-3.15z"
-                        />
-                        <path
-                          fill="#EA4335"
-                          d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.24 6.59l4.04 3.15c.95-2.84 3.6-4.99 6.72-4.99z"
-                        />
-                      </svg>
-                      Google OAuth (Supabase Provider)
+                      {isDemoUser ? (
+                        <>
+                          <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Instant Test Mode (Active)</span>
+                        </>
+                      ) : isLoggedIn ? (
+                        <>
+                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Google OAuth Authenticated</span>
+                        </>
+                      ) : (
+                        <span>Guest Mode</span>
+                      )}
                     </span>
                   </div>
 
