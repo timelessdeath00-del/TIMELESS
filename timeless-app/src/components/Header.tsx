@@ -199,6 +199,10 @@ export default function Header({ onToggleSidebar, isSidebarExpanded }: HeaderPro
         provider: 'google',
         options: {
           redirectTo: `${window.location.origin}/auth/callback`,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
         },
       });
     } catch (err) {
