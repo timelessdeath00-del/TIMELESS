@@ -1,0 +1,32 @@
+# dependencies
+node_modules
+/timeless-app/node_modules
+/.pnp
+.pnp.*
+
+# next.js
+/.next/
+/timeless-app/.next/
+/out/
+/timeless-app/out/
+
+# production
+/build
+/timeless-app/build
+
+# env files (keep secrets out of git)
+.env*
+timeless-app/.env*
+!.env.example
+!timeless-app/.env.example
+
+# misc
+.DS_Store
+*.pem
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.vercel
+*.tsbuildinfo
+next-env.d.ts
