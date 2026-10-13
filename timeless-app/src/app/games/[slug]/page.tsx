@@ -249,8 +249,8 @@ export default function GamePage() {
                     ref={iframeRef}
                     src={game.embedUrl}
                     title={game.title}
-                    sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-pointer-lock"
-                    allow="fullscreen; gamepad; autoplay"
+                    sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-pointer-lock allow-downloads allow-modals allow-orientation-lock"
+                    allow="fullscreen; gamepad; autoplay; clipboard-write; accelerometer; gyroscope; screen-wake-lock"
                     loading="lazy"
                     referrerPolicy="no-referrer-when-downgrade"
                     className="w-full h-full border-0 absolute inset-0"
@@ -377,6 +377,30 @@ export default function GamePage() {
                   <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight mb-2">
                     About {game.title}
                   </h1>
+
+                  {/* Game Metadata Chips */}
+                  <div className="flex flex-wrap items-center gap-3 mb-4 text-xs text-zinc-400">
+                    {game.developer && (
+                      <span className="px-2.5 py-1 rounded-xl bg-[#0F0F1A] border border-[#26263B]">
+                        Developer: <strong className="text-zinc-200">{game.developer}</strong>
+                      </span>
+                    )}
+                    <span className="px-2.5 py-1 rounded-xl bg-[#0F0F1A] border border-[#26263B]">
+                      Genre: <strong className="text-zinc-200 capitalize">{game.category}</strong>
+                    </span>
+                    <span className="px-2.5 py-1 rounded-xl bg-[#0F0F1A] border border-[#26263B]">
+                      Rating: <strong className="text-amber-400 font-bold">★ {game.rating}</strong> ({game.playsCount.toLocaleString()} plays)
+                    </span>
+                    <span className="px-2.5 py-1 rounded-xl bg-[#0F0F1A] border border-[#26263B]">
+                      Devices: <strong className="text-zinc-200">Desktop, Phone, Tablet</strong>
+                    </span>
+                    {game.releaseDate && (
+                      <span className="px-2.5 py-1 rounded-xl bg-[#0F0F1A] border border-[#26263B]">
+                        Released: <strong className="text-zinc-200">{game.releaseDate}</strong>
+                      </span>
+                    )}
+                  </div>
+
                   <p className="text-zinc-300 text-sm leading-relaxed whitespace-pre-line">
                     {game.description}
                   </p>

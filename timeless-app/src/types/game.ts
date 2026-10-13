@@ -42,6 +42,8 @@ export interface Game {
   likes: number;
   dislikes: number;
   rating: number; // e.g. 4.8 / 5
+  developer?: string;
+  releaseDate?: string;
   featured?: boolean;
   isNew?: boolean;
   isHot?: boolean;
