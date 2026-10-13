@@ -250,7 +250,7 @@ export default function GamePage() {
                     src={game.embedUrl}
                     title={game.title}
                     sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-pointer-lock allow-downloads allow-modals allow-orientation-lock"
-                    allow="fullscreen; gamepad; autoplay; clipboard-write; accelerometer; gyroscope; screen-wake-lock"
+                    allow="fullscreen; gamepad; autoplay; clipboard-write; accelerometer; gyroscope; screen-wake-lock; encrypted-media"
                     loading="lazy"
                     referrerPolicy="no-referrer-when-downgrade"
                     className="w-full h-full border-0 absolute inset-0"
