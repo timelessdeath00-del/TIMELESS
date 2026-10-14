@@ -21,7 +21,7 @@ import {
 import Header from '@/components/Header';
 import Sidebar from '@/components/Sidebar';
 import Footer from '@/components/Footer';
-import { INITIAL_GAMES, DELETED_GAME_IDS } from '@/data/games';
+import { INITIAL_GAMES, DELETED_GAME_IDS, CUSTOM_GAMES } from '@/data/games';
 import { CATEGORIES } from '@/data/categories';
 import { extractEmbedUrl } from '@/lib/embedParser';
 import { Game, GameCategory, GameProvider } from '@/types/game';
@@ -46,7 +46,7 @@ export default function AdminPage() {
   const [badge, setBadge] = useState<string>('NEW');
   const [formSuccess, setFormSuccess] = useState(false);
 
-  // Fetch deleted games on mount from server and localStorage
+  // Fetch deleted games & custom games on mount from server and localStorage
   useEffect(() => {
     const fetchDeleted = async () => {
       try {
@@ -56,7 +56,6 @@ export default function AdminPage() {
           if (Array.isArray(data.deletedIds)) {
             setDeletedIds(data.deletedIds);
             localStorage.setItem('timeless_deleted_game_ids', JSON.stringify(data.deletedIds));
-            return;
           }
         }
       } catch (err) {
@@ -73,7 +72,33 @@ export default function AdminPage() {
       } catch {}
     };
 
+    const fetchCustomGames = async () => {
+      try {
+        const res = await fetch('/api/admin/add-game');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.games) && data.games.length > 0) {
+            setGamesList((prev) => {
+              const ids = new Set(data.games.map((g: Game) => g.id));
+              return [...data.games, ...prev.filter((p) => !ids.has(p.id))];
+            });
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Could not fetch custom games from server:', err);
+      }
+
+      if (CUSTOM_GAMES.length > 0) {
+        setGamesList((prev) => {
+          const ids = new Set(CUSTOM_GAMES.map((g) => g.id));
+          return [...CUSTOM_GAMES, ...prev.filter((p) => !ids.has(p.id))];
+        });
+      }
+    };
+
     fetchDeleted();
+    fetchCustomGames();
   }, []);
 
   // Parsed embed URL preview
@@ -82,7 +107,7 @@ export default function AdminPage() {
   // Word count helper for AdSense compliance
   const wordCount = description.trim() ? description.trim().split(/\s+/).length : 0;
 
-  const handleAddGame = (e: React.FormEvent) => {
+  const handleAddGame = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title || !parsedEmbedUrl) {
       alert('Please enter a title and a valid embed code or URL');
@@ -91,7 +116,7 @@ export default function AdminPage() {
 
     const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
     const newGame: Game = {
-      id: `game-${Date.now()}`,
+      id: `game-${slug}-${Date.now()}`,
       slug,
       title,
       description: description || `Play ${title} online for free on Timeless Games.`,
@@ -116,6 +141,22 @@ export default function AdminPage() {
     setGamesList([newGame, ...gamesList]);
     setFormSuccess(true);
     setTimeout(() => setFormSuccess(false), 3000);
+
+    // Save to server API & localStorage
+    try {
+      await fetch('/api/admin/add-game', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newGame),
+      });
+
+      const existingCustom = localStorage.getItem('timeless_custom_games');
+      const list: Game[] = existingCustom ? JSON.parse(existingCustom) : [];
+      localStorage.setItem('timeless_custom_games', JSON.stringify([newGame, ...list]));
+      window.dispatchEvent(new CustomEvent('timeless-game-added', { detail: newGame }));
+    } catch (err) {
+      console.error('Failed to persist new game:', err);
+    }
 
     // Reset fields
     setTitle('');

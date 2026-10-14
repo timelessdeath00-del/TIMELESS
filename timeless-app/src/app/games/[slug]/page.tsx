@@ -25,7 +25,7 @@ import Sidebar from '@/components/Sidebar';
 import GameTile from '@/components/GameTile';
 import AdSlot from '@/components/AdSlot';
 import Footer from '@/components/Footer';
-import { INITIAL_GAMES, getActiveGames, isGameDeleted } from '@/data/games';
+import { INITIAL_GAMES, CUSTOM_GAMES, getActiveGames, isGameDeleted } from '@/data/games';
 import { Game } from '@/types/game';
 
 export default function GamePage() {
@@ -84,7 +84,14 @@ export default function GamePage() {
       return;
     }
 
-    const found = INITIAL_GAMES.find(
+    let customList: Game[] = [];
+    try {
+      const stored = localStorage.getItem('timeless_custom_games');
+      if (stored) customList = JSON.parse(stored);
+    } catch {}
+
+    const allGames = [...customList, ...CUSTOM_GAMES, ...INITIAL_GAMES];
+    const found = allGames.find(
       (g) => g.slug === slug || (slug === 'sky-runner-endless-dash' && g.slug === 'temple-run-2')
     );
 

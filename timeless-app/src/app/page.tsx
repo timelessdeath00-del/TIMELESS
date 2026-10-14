@@ -29,35 +29,45 @@ export default function HomePage() {
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const [recentlyPlayed, setRecentlyPlayed] = useState<Game[]>([]);
   const [deletedIds, setDeletedIds] = useState<string[]>([]);
+  const [customGames, setCustomGames] = useState<Game[]>([]);
   const featuredRowRef = useRef<HTMLDivElement>(null);
 
-  // Sync deleted games from localStorage and listen to real-time deletion events
+  // Sync deleted games and custom added games
   useEffect(() => {
     try {
       const stored = localStorage.getItem('timeless_deleted_game_ids');
-      if (stored) {
-        setDeletedIds(JSON.parse(stored));
-      }
+      if (stored) setDeletedIds(JSON.parse(stored));
+      const customStored = localStorage.getItem('timeless_custom_games');
+      if (customStored) setCustomGames(JSON.parse(customStored));
     } catch {}
 
     const handleDeletedEvent = () => {
       try {
         const stored = localStorage.getItem('timeless_deleted_game_ids');
-        if (stored) {
-          setDeletedIds(JSON.parse(stored));
-        }
+        if (stored) setDeletedIds(JSON.parse(stored));
+      } catch {}
+    };
+
+    const handleAddedEvent = () => {
+      try {
+        const customStored = localStorage.getItem('timeless_custom_games');
+        if (customStored) setCustomGames(JSON.parse(customStored));
       } catch {}
     };
 
     window.addEventListener('timeless-game-deleted', handleDeletedEvent);
+    window.addEventListener('timeless-game-added', handleAddedEvent);
     window.addEventListener('storage', handleDeletedEvent);
+    window.addEventListener('storage', handleAddedEvent);
     return () => {
       window.removeEventListener('timeless-game-deleted', handleDeletedEvent);
+      window.removeEventListener('timeless-game-added', handleAddedEvent);
       window.removeEventListener('storage', handleDeletedEvent);
+      window.removeEventListener('storage', handleAddedEvent);
     };
   }, []);
 
-  const activeGames = getActiveGames(deletedIds);
+  const activeGames = getActiveGames(deletedIds, customGames);
 
   // Load recently played games from localStorage
   useEffect(() => {

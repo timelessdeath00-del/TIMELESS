@@ -1,14 +1,31 @@
 import { Game } from '@/types/game';
 import deletedIdsList from './deleted_games.json';
+import customGamesList from './custom_games.json';
 
 export const DELETED_GAME_IDS: string[] = (deletedIdsList as string[]) || [];
+export const CUSTOM_GAMES: Game[] = (customGamesList as Game[]) || [];
 
 /**
- * Returns all active games, filtering out any games that have been deleted by the admin
+ * Returns all active games (built-in + admin custom published), filtering out any deleted games
  */
-export function getActiveGames(extraDeletedIds?: string[]): Game[] {
+export function getActiveGames(extraDeletedIds?: string[], extraCustomGames?: Game[]): Game[] {
   const allDeleted = new Set([...DELETED_GAME_IDS, ...(extraDeletedIds || [])]);
-  return INITIAL_GAMES.filter((g) => !allDeleted.has(g.id) && !allDeleted.has(g.slug));
+  const allGames = [...(extraCustomGames || CUSTOM_GAMES), ...INITIAL_GAMES];
+
+  const seenIds = new Set<string>();
+  const seenSlugs = new Set<string>();
+  const uniqueGames: Game[] = [];
+
+  for (const game of allGames) {
+    if (seenIds.has(game.id) || seenSlugs.has(game.slug)) continue;
+    seenIds.add(game.id);
+    seenSlugs.add(game.slug);
+    if (!allDeleted.has(game.id) && !allDeleted.has(game.slug)) {
+      uniqueGames.push(game);
+    }
+  }
+
+  return uniqueGames;
 }
 
 /**
@@ -17,7 +34,9 @@ export function getActiveGames(extraDeletedIds?: string[]): Game[] {
 export function isGameDeleted(gameIdOrSlug: string, extraDeletedIds?: string[]): boolean {
   const allDeleted = new Set([...DELETED_GAME_IDS, ...(extraDeletedIds || [])]);
   if (allDeleted.has(gameIdOrSlug)) return true;
-  const game = INITIAL_GAMES.find((g) => g.id === gameIdOrSlug || g.slug === gameIdOrSlug);
+  const game = [...CUSTOM_GAMES, ...INITIAL_GAMES].find(
+    (g) => g.id === gameIdOrSlug || g.slug === gameIdOrSlug
+  );
   if (game && (allDeleted.has(game.id) || allDeleted.has(game.slug))) return true;
   return false;
 }
