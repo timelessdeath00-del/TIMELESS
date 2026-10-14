@@ -7,27 +7,50 @@ import Header from '@/components/Header';
 import Sidebar from '@/components/Sidebar';
 import GameTile from '@/components/GameTile';
 import Footer from '@/components/Footer';
-import { INITIAL_GAMES } from '@/data/games';
+import { INITIAL_GAMES, getActiveGames } from '@/data/games';
 import { Game } from '@/types/game';
 
 export default function HistoryPage() {
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const [historyGames, setHistoryGames] = useState<Game[]>([]);
+  const [deletedIds, setDeletedIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('timeless_deleted_game_ids');
+      if (stored) setDeletedIds(JSON.parse(stored));
+    } catch {}
+
+    const handleDeletedEvent = () => {
+      try {
+        const stored = localStorage.getItem('timeless_deleted_game_ids');
+        if (stored) setDeletedIds(JSON.parse(stored));
+      } catch {}
+    };
+
+    window.addEventListener('timeless-game-deleted', handleDeletedEvent);
+    window.addEventListener('storage', handleDeletedEvent);
+    return () => {
+      window.removeEventListener('timeless-game-deleted', handleDeletedEvent);
+      window.removeEventListener('storage', handleDeletedEvent);
+    };
+  }, []);
 
   useEffect(() => {
     try {
       const stored = localStorage.getItem('timeless_history');
       if (stored) {
         const slugs: string[] = JSON.parse(stored);
+        const activeList = getActiveGames(deletedIds);
         const list = slugs
-          .map((slug) => INITIAL_GAMES.find((g) => g.slug === slug))
+          .map((slug) => activeList.find((g) => g.slug === slug))
           .filter(Boolean) as Game[];
         setHistoryGames(list);
       }
     } catch {
       // ignore
     }
-  }, []);
+  }, [deletedIds]);
 
   const handleClearHistory = () => {
     if (confirm('Clear all recently played history?')) {

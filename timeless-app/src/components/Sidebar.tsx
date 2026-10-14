@@ -52,10 +52,27 @@ export default function Sidebar({ isExpanded, onClose }: SidebarProps) {
     { label: 'Casual', href: '/category/casual', icon: Smile },
   ];
 
+  const [isAdminUser, setIsAdminUser] = React.useState(false);
+
+  React.useEffect(() => {
+    try {
+      const adminSession = localStorage.getItem('timeless_admin_session');
+      if (adminSession) {
+        setIsAdminUser(true);
+      }
+    } catch {}
+  }, []);
+
   const userItems = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { label: 'Favorites', href: '/favorites', icon: Heart },
     { label: 'History', href: '/history', icon: History },
+    ...(isAdminUser
+      ? [
+          { label: 'Master Profile', href: '/profile/timelessdeath00', icon: ShieldCheck },
+          { label: 'Admin Console', href: '/admin', icon: Trophy },
+        ]
+      : []),
   ];
 
   const isActive = (href: string) => {
