@@ -157,9 +157,33 @@ function DashboardContent() {
 
     const fetchUserProfile = async () => {
       try {
-        const { data: authData } = await supabase.auth.getUser();
-        if (authData?.user) {
-          const authUser = authData.user;
+        let authUser: any = null;
+
+        // Check if redirected directly with OAuth authorization code
+        if (typeof window !== 'undefined') {
+          const urlParams = new URLSearchParams(window.location.search);
+          const code = urlParams.get('code');
+          if (code) {
+            try {
+              const { data: sessionData, error: exchangeErr } = await supabase.auth.exchangeCodeForSession(code);
+              if (!exchangeErr && sessionData?.user) {
+                authUser = sessionData.user;
+                const cleanUrl = new URL(window.location.href);
+                cleanUrl.searchParams.delete('code');
+                window.history.replaceState({}, document.title, cleanUrl.pathname + (cleanUrl.searchParams.toString() ? `?${cleanUrl.searchParams.toString()}` : ''));
+              }
+            } catch (err) {
+              console.error('Dashboard code exchange error:', err);
+            }
+          }
+        }
+
+        if (!authUser) {
+          const { data: authData } = await supabase.auth.getUser();
+          authUser = authData?.user;
+        }
+
+        if (authUser) {
           setIsLoggedIn(true);
           setIsDemoUser(false);
 

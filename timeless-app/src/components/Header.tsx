@@ -41,31 +41,77 @@ export default function Header({ onToggleSidebar, isSidebarExpanded }: HeaderPro
 
   const searchRef = useRef<HTMLDivElement>(null);
 
-  // Sync Supabase user authentication and persist profile in Supabase database
+  // Sync Supabase user authentication, exchange OAuth callback codes, and persist profile in Supabase database
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getUser().then(({ data }) => {
-      if (data?.user) {
-        const u = data.user;
-        const name = u.user_metadata?.full_name || u.user_metadata?.name || u.email?.split('@')[0] || 'Player';
-        const avatar = u.user_metadata?.avatar_url || u.user_metadata?.picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80';
+
+    const handleInitialAuth = async () => {
+      let activeUser: any = null;
+
+      // Check if URL contains OAuth authorization code (e.g. redirected to /?code=... from Google)
+      if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get('code');
+        if (code) {
+          try {
+            const { data: sessionData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+            if (!exchangeError && sessionData?.user) {
+              activeUser = sessionData.user;
+              // Clean the ?code= query param from the browser URL bar
+              const cleanUrl = new URL(window.location.href);
+              cleanUrl.searchParams.delete('code');
+              window.history.replaceState({}, document.title, cleanUrl.pathname + (cleanUrl.searchParams.toString() ? `?${cleanUrl.searchParams.toString()}` : ''));
+            } else if (exchangeError) {
+              console.error('Session exchange error:', exchangeError.message);
+            }
+          } catch (err) {
+            console.error('Code exchange exception:', err);
+          }
+        }
+      }
+
+      if (!activeUser) {
+        const { data } = await supabase.auth.getUser();
+        activeUser = data?.user;
+      }
+
+      if (activeUser) {
+        const name = activeUser.user_metadata?.full_name || activeUser.user_metadata?.name || activeUser.email?.split('@')[0] || 'Player';
+        const avatar = activeUser.user_metadata?.avatar_url || activeUser.user_metadata?.picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80';
         setUser({
           name,
-          email: u.email || '',
+          email: activeUser.email || '',
           avatar,
         });
 
         // Ensure saved in Supabase 'profiles' database table
-        supabase.from('profiles').upsert(
-          {
-            id: u.id,
-            email: u.email || '',
-            display_name: name,
-            avatar_url: avatar,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'id' }
-        ).then(() => {});
+        try {
+          await supabase.from('profiles').upsert(
+            {
+              id: activeUser.id,
+              email: activeUser.email || '',
+              display_name: name,
+              avatar_url: avatar,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'id' }
+          );
+        } catch (profileErr) {
+          console.warn('Profile sync notice:', profileErr);
+        }
+
+        // If user just signed in via OAuth redirect, smoothly guide them to their dashboard profile
+        if (typeof window !== 'undefined') {
+          const params = new URLSearchParams(window.location.search);
+          if (params.has('code') || window.location.pathname === '/') {
+            // Give a tiny tick for state hydration then route to dashboard
+            setTimeout(() => {
+              if (window.location.pathname === '/') {
+                router.push('/dashboard');
+              }
+            }, 500);
+          }
+        }
       } else {
         // Check for local demo user session
         try {
@@ -77,11 +123,13 @@ export default function Header({ onToggleSidebar, isSidebarExpanded }: HeaderPro
           // ignore
         }
       }
-    });
+    };
+
+    handleInitialAuth();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
         const u = session.user;
         const name = u.user_metadata?.full_name || u.user_metadata?.name || u.email?.split('@')[0] || 'Player';
@@ -92,17 +140,20 @@ export default function Header({ onToggleSidebar, isSidebarExpanded }: HeaderPro
           avatar,
         });
 
-        // Ensure saved in Supabase 'profiles' database table
-        supabase.from('profiles').upsert(
-          {
-            id: u.id,
-            email: u.email || '',
-            display_name: name,
-            avatar_url: avatar,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'id' }
-        ).then(() => {});
+        try {
+          await supabase.from('profiles').upsert(
+            {
+              id: u.id,
+              email: u.email || '',
+              display_name: name,
+              avatar_url: avatar,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'id' }
+          );
+        } catch (profileErr) {
+          console.warn('Profile sync notice:', profileErr);
+        }
       } else {
         try {
           const demo = localStorage.getItem('timeless_demo_user');
@@ -120,7 +171,7 @@ export default function Header({ onToggleSidebar, isSidebarExpanded }: HeaderPro
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [router]);
 
   // Sync favorites count from local storage
   useEffect(() => {
