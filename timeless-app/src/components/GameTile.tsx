@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Play, Star, Flame, Sparkles } from 'lucide-react';
+import { Play, Star, Flame, Sparkles, Heart } from 'lucide-react';
 import { Game } from '@/types/game';
 
 interface GameTileProps {
@@ -14,6 +14,53 @@ interface GameTileProps {
 
 export default function GameTile({ game, size = '1x1', priority = false }: GameTileProps) {
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [isFavorited, setIsFavorited] = useState(false);
+
+  // Sync favorite state
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('timeless_favorites');
+      if (stored) {
+        const list: string[] = JSON.parse(stored);
+        setIsFavorited(list.includes(game.slug));
+      }
+    } catch {}
+
+    const handleFavUpdated = () => {
+      try {
+        const stored = localStorage.getItem('timeless_favorites');
+        if (stored) {
+          const list: string[] = JSON.parse(stored);
+          setIsFavorited(list.includes(game.slug));
+        }
+      } catch {}
+    };
+
+    window.addEventListener('favorites_updated', handleFavUpdated);
+    window.addEventListener('storage', handleFavUpdated);
+    return () => {
+      window.removeEventListener('favorites_updated', handleFavUpdated);
+      window.removeEventListener('storage', handleFavUpdated);
+    };
+  }, [game.slug]);
+
+  const handleToggleFavorite = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      const stored = localStorage.getItem('timeless_favorites');
+      let list: string[] = stored ? JSON.parse(stored) : [];
+      if (list.includes(game.slug)) {
+        list = list.filter((s) => s !== game.slug);
+        setIsFavorited(false);
+      } else {
+        list.push(game.slug);
+        setIsFavorited(true);
+      }
+      localStorage.setItem('timeless_favorites', JSON.stringify(list));
+      window.dispatchEvent(new Event('favorites_updated'));
+    } catch {}
+  };
 
   // Bento span classes
   let spanClasses = 'col-span-1 row-span-1 h-[140px] sm:h-[160px] md:h-[180px]';
@@ -68,6 +115,20 @@ export default function GameTile({ game, size = '1x1', priority = false }: GameT
     >
       {/* Badge */}
       {renderBadge()}
+
+      {/* Quick 1-Click Bookmark / Favorite Button */}
+      <button
+        type="button"
+        onClick={handleToggleFavorite}
+        title={isFavorited ? 'Remove from Favorites' : 'Add to Favorites'}
+        className={`absolute top-2.5 right-2.5 z-20 w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 backdrop-blur-md ${
+          isFavorited
+            ? 'bg-pink-600/90 text-white shadow-lg shadow-pink-500/40 scale-105'
+            : 'bg-black/50 text-white/70 hover:text-white hover:bg-black/80 opacity-0 group-hover:opacity-100'
+        }`}
+      >
+        <Heart className={`w-4 h-4 transition-transform active:scale-125 ${isFavorited ? 'fill-white' : ''}`} />
+      </button>
 
       {/* Shimmer skeleton while loading */}
       {!imageLoaded && (

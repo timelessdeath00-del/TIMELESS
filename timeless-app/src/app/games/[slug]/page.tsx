@@ -19,6 +19,12 @@ import {
   ShieldAlert,
   Sparkles,
   Info,
+  Moon,
+  Sun,
+  Keyboard,
+  Flame,
+  Crown,
+  Skull,
 } from 'lucide-react';
 import Header from '@/components/Header';
 import Sidebar from '@/components/Sidebar';
@@ -39,12 +45,23 @@ export default function GamePage() {
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const [isLoadingIframe, setIsLoadingIframe] = useState(true);
   const [isTheaterMode, setIsTheaterMode] = useState(false);
+  const [isCinemaDimmed, setIsCinemaDimmed] = useState(false);
+  const [showControlsHUD, setShowControlsHUD] = useState(false);
   const [isFavorited, setIsFavorited] = useState(false);
   const [userVote, setUserVote] = useState<'like' | 'dislike' | null>(null);
   const [likesCount, setLikesCount] = useState(0);
   const [dislikesCount, setDislikesCount] = useState(0);
   const [copiedShare, setCopiedShare] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+
+  // Community Reactions
+  const [reactions, setReactions] = useState<{ [key: string]: number }>({
+    fire: 1420,
+    mindblown: 890,
+    rage: 412,
+    goat: 1850,
+  });
+  const [userReaction, setUserReaction] = useState<string | null>(null);
 
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -201,6 +218,43 @@ export default function GamePage() {
     }
   };
 
+  // Keyboard shortcut listener
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is typing in an input
+      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) return;
+
+      if (e.key === 'f' || e.key === 'F') {
+        handleFullscreen();
+      } else if (e.key === 'l' || e.key === 'L') {
+        setIsCinemaDimmed((prev) => !prev);
+      } else if (e.key === 't' || e.key === 'T') {
+        setIsTheaterMode((prev) => !prev);
+      } else if (e.key === 'c' || e.key === 'C') {
+        setShowControlsHUD((prev) => !prev);
+      } else if (e.key === 'Escape') {
+        setIsCinemaDimmed(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Handle community reaction
+  const handleReaction = (type: string) => {
+    if (userReaction === type) {
+      setUserReaction(null);
+      setReactions((prev) => ({ ...prev, [type]: Math.max(0, (prev[type] || 0) - 1) }));
+    } else {
+      if (userReaction) {
+        setReactions((prev) => ({ ...prev, [userReaction]: Math.max(0, (prev[userReaction] || 0) - 1) }));
+      }
+      setUserReaction(type);
+      setReactions((prev) => ({ ...prev, [type]: (prev[type] || 0) + 1 }));
+    }
+  };
+
   // Fullscreen trigger
   const handleFullscreen = () => {
     if (!playerContainerRef.current) return;
@@ -253,7 +307,20 @@ export default function GamePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0F0F1A] text-zinc-100 flex flex-col">
+    <div className="min-h-screen bg-[#0F0F1A] text-zinc-100 flex flex-col relative">
+      {/* Cinema Lights Dimmer Overlay */}
+      {isCinemaDimmed && (
+        <div
+          onClick={() => setIsCinemaDimmed(false)}
+          className="fixed inset-0 z-40 bg-black/90 backdrop-blur-sm cursor-pointer transition-opacity duration-300 flex items-start justify-center pt-6"
+        >
+          <div className="px-4 py-2 rounded-full bg-zinc-900/80 border border-zinc-700/60 text-xs font-semibold text-zinc-300 flex items-center gap-2 shadow-2xl pointer-events-auto">
+            <Sun className="w-4 h-4 text-amber-400" />
+            <span>Cinema Dimmer active — Click anywhere or press [ESC] / [L] to turn lights ON</span>
+          </div>
+        </div>
+      )}
+
       {/* VideoGame JSON-LD Schema */}
       <script
         type="application/ld+json"
@@ -299,7 +366,9 @@ export default function GamePage() {
               {/* Game Frame Container */}
               <div
                 ref={playerContainerRef}
-                className="relative w-full rounded-2xl md:rounded-3xl overflow-hidden bg-black border border-[#26263B] shadow-2xl flex flex-col"
+                className={`w-full rounded-2xl md:rounded-3xl overflow-hidden bg-black border border-[#26263B] shadow-2xl flex flex-col transition-all duration-300 ${
+                  isCinemaDimmed ? 'relative z-50 shadow-[0_0_80px_rgba(123,63,242,0.65)] ring-2 ring-[#7B3FF2]/50' : 'relative'
+                }`}
               >
                 {/* 16:9 Aspect Ratio Frame */}
                 <div className="relative w-full aspect-video min-h-[300px] sm:min-h-[420px] md:min-h-[520px] bg-black">
@@ -350,11 +419,37 @@ export default function GamePage() {
 
                   {/* Action Controls */}
                   <div className="flex items-center gap-1.5 sm:gap-2">
+                    {/* Controls HUD Toggle */}
+                    <button
+                      onClick={() => setShowControlsHUD(!showControlsHUD)}
+                      className={`p-2 rounded-xl transition-all ${
+                        showControlsHUD
+                          ? 'text-[#A78BFA] bg-[#7B3FF2]/20 border border-[#7B3FF2]/40'
+                          : 'text-zinc-300 hover:text-white hover:bg-[#24243b]'
+                      }`}
+                      title="Controls HUD [C]"
+                    >
+                      <Keyboard className="w-4 h-4" />
+                    </button>
+
+                    {/* Cinema Dimmer Toggle */}
+                    <button
+                      onClick={() => setIsCinemaDimmed(!isCinemaDimmed)}
+                      className={`p-2 rounded-xl transition-all ${
+                        isCinemaDimmed
+                          ? 'text-amber-400 bg-amber-500/20 border border-amber-500/40 shadow-md'
+                          : 'text-zinc-300 hover:text-white hover:bg-[#24243b]'
+                      }`}
+                      title={isCinemaDimmed ? 'Turn Lights ON [L]' : 'Cinema Dimmer [L]'}
+                    >
+                      {isCinemaDimmed ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                    </button>
+
                     {/* Reload Button */}
                     <button
                       onClick={handleReload}
                       className="p-2 rounded-xl text-zinc-300 hover:text-white hover:bg-[#24243b] transition-colors"
-                      title="Reload Game"
+                      title="Reload Game [R]"
                     >
                       <RotateCw className="w-4 h-4" />
                     </button>
@@ -367,7 +462,7 @@ export default function GamePage() {
                           ? 'text-[#A78BFA] bg-[#7B3FF2]/20'
                           : 'text-zinc-300 hover:text-white hover:bg-[#24243b]'
                       }`}
-                      title={isTheaterMode ? 'Exit Theater Mode' : 'Theater Mode'}
+                      title={isTheaterMode ? 'Exit Theater Mode [T]' : 'Theater Mode [T]'}
                     >
                       <Tv className="w-4 h-4" />
                     </button>
@@ -376,65 +471,158 @@ export default function GamePage() {
                     <button
                       onClick={handleFullscreen}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#7B3FF2] hover:bg-[#905cf6] text-white font-bold text-xs shadow-md shadow-[#7B3FF2]/30 transition-all active:scale-95"
-                      title="Play Fullscreen"
+                      title="Play Fullscreen [F]"
                     >
                       <Maximize className="w-4 h-4" />
                       <span className="hidden sm:inline">Fullscreen</span>
                     </button>
                   </div>
                 </div>
+
+                {/* Visual Controls HUD Overlay / Collapsible Bar */}
+                {showControlsHUD && (
+                  <div className="bg-[#12121E] border-t border-[#26263B] p-4 text-xs animate-in slide-in-from-top-2 duration-150">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                      <div className="flex items-center gap-2">
+                        <span className="font-extrabold text-white uppercase tracking-wider text-[11px] text-[#A78BFA]">
+                          🎮 Quick Controller HUD
+                        </span>
+                        <span className="text-[10px] text-zinc-500">• Ready to Play</span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <div className="flex items-center gap-1">
+                          <kbd className="px-2 py-1 rounded-md bg-[#1C1C30] border border-zinc-700 text-[10px] font-mono text-zinc-200 shadow-xs">W</kbd>
+                          <kbd className="px-2 py-1 rounded-md bg-[#1C1C30] border border-zinc-700 text-[10px] font-mono text-zinc-200 shadow-xs">A</kbd>
+                          <kbd className="px-2 py-1 rounded-md bg-[#1C1C30] border border-zinc-700 text-[10px] font-mono text-zinc-200 shadow-xs">S</kbd>
+                          <kbd className="px-2 py-1 rounded-md bg-[#1C1C30] border border-zinc-700 text-[10px] font-mono text-zinc-200 shadow-xs">D</kbd>
+                          <span className="text-[11px] text-zinc-400 ml-1">Move / Steer</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <kbd className="px-2.5 py-1 rounded-md bg-[#1C1C30] border border-zinc-700 text-[10px] font-mono text-zinc-200 shadow-xs">SPACE</kbd>
+                          <span className="text-[11px] text-zinc-400 ml-1">Action / Jump</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <kbd className="px-2 py-1 rounded-md bg-[#1C1C30] border border-zinc-700 text-[10px] font-mono text-zinc-200 shadow-xs">F</kbd>
+                          <span className="text-[11px] text-zinc-400 ml-1">Fullscreen</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <kbd className="px-2 py-1 rounded-md bg-[#1C1C30] border border-zinc-700 text-[10px] font-mono text-zinc-200 shadow-xs">L</kbd>
+                          <span className="text-[11px] text-zinc-400 ml-1">Lights</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* Engagement Bar (Vote, Favorite, Share) */}
-              <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl bg-[#171726] border border-[#26263B]">
-                {/* Voting Buttons */}
-                <div className="flex items-center gap-1 bg-[#0F0F1A] p-1 rounded-xl border border-[#26263B]">
-                  <button
-                    onClick={() => handleVote('like')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                      userVote === 'like'
-                        ? 'bg-emerald-500/20 text-emerald-400'
-                        : 'text-zinc-400 hover:text-white'
-                    }`}
-                  >
-                    <ThumbsUp className="w-3.5 h-3.5" />
-                    <span>{likesCount}</span>
-                  </button>
-                  <div className="w-px h-4 bg-[#26263B]" />
-                  <button
-                    onClick={() => handleVote('dislike')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                      userVote === 'dislike'
-                        ? 'bg-red-500/20 text-red-400'
-                        : 'text-zinc-400 hover:text-white'
-                    }`}
-                  >
-                    <ThumbsDown className="w-3.5 h-3.5" />
-                    <span>{dislikesCount}</span>
-                  </button>
+              {/* Engagement & Community Reactions Bar */}
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl bg-[#171726] border border-[#26263B]">
+                  {/* Voting Buttons */}
+                  <div className="flex items-center gap-1 bg-[#0F0F1A] p-1 rounded-xl border border-[#26263B]">
+                    <button
+                      onClick={() => handleVote('like')}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                        userVote === 'like'
+                          ? 'bg-emerald-500/20 text-emerald-400'
+                          : 'text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      <ThumbsUp className="w-3.5 h-3.5" />
+                      <span>{likesCount}</span>
+                    </button>
+                    <div className="w-px h-4 bg-[#26263B]" />
+                    <button
+                      onClick={() => handleVote('dislike')}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                        userVote === 'dislike'
+                          ? 'bg-red-500/20 text-red-400'
+                          : 'text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      <ThumbsDown className="w-3.5 h-3.5" />
+                      <span>{dislikesCount}</span>
+                    </button>
+                  </div>
+
+                  {/* Favorite & Share */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleToggleFavorite}
+                      className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold border transition-all ${
+                        isFavorited
+                          ? 'bg-pink-500/20 text-pink-400 border-pink-500/40 shadow-sm shadow-pink-500/20'
+                          : 'bg-[#0F0F1A] text-zinc-300 border-[#26263B] hover:text-white hover:border-zinc-500'
+                      }`}
+                    >
+                      <Heart className={`w-4 h-4 ${isFavorited ? 'fill-pink-500' : ''}`} />
+                      <span>{isFavorited ? 'Favorited' : 'Favorite'}</span>
+                    </button>
+
+                    <button
+                      onClick={() => setIsShareModalOpen(true)}
+                      className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#0F0F1A] text-zinc-300 border border-[#26263B] hover:text-white hover:border-zinc-500 text-xs font-bold transition-colors"
+                    >
+                      <Share2 className="w-4 h-4" />
+                      <span>Share</span>
+                    </button>
+                  </div>
                 </div>
 
-                {/* Favorite & Share */}
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleToggleFavorite}
-                    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold border transition-colors ${
-                      isFavorited
-                        ? 'bg-pink-500/20 text-pink-400 border-pink-500/40'
-                        : 'bg-[#0F0F1A] text-zinc-300 border-[#26263B] hover:text-white hover:border-zinc-500'
-                    }`}
-                  >
-                    <Heart className={`w-4 h-4 ${isFavorited ? 'fill-pink-500' : ''}`} />
-                    <span>{isFavorited ? 'Favorited' : 'Favorite'}</span>
-                  </button>
+                {/* Live Community Reactions Pill Bar */}
+                <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-[#171726]/80 border border-[#26263B] overflow-x-auto no-scrollbar">
+                  <span className="text-[11px] font-black uppercase text-zinc-400 shrink-0 tracking-wider">
+                    Reactions:
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => handleReaction('fire')}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold border transition-all ${
+                        userReaction === 'fire'
+                          ? 'bg-orange-500/20 text-orange-400 border-orange-500/50 scale-105 shadow-sm'
+                          : 'bg-[#0F0F1A] text-zinc-300 border-zinc-800 hover:border-zinc-600'
+                      }`}
+                    >
+                      <span>🔥</span>
+                      <span>{reactions.fire.toLocaleString()}</span>
+                    </button>
 
-                  <button
-                    onClick={() => setIsShareModalOpen(true)}
-                    className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#0F0F1A] text-zinc-300 border border-[#26263B] hover:text-white hover:border-zinc-500 text-xs font-bold transition-colors"
-                  >
-                    <Share2 className="w-4 h-4" />
-                    <span>Share</span>
-                  </button>
+                    <button
+                      onClick={() => handleReaction('mindblown')}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold border transition-all ${
+                        userReaction === 'mindblown'
+                          ? 'bg-purple-500/20 text-purple-400 border-purple-500/50 scale-105 shadow-sm'
+                          : 'bg-[#0F0F1A] text-zinc-300 border-zinc-800 hover:border-zinc-600'
+                      }`}
+                    >
+                      <span>🤯</span>
+                      <span>{reactions.mindblown.toLocaleString()}</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleReaction('goat')}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold border transition-all ${
+                        userReaction === 'goat'
+                          ? 'bg-amber-500/20 text-amber-400 border-amber-500/50 scale-105 shadow-sm'
+                          : 'bg-[#0F0F1A] text-zinc-300 border-zinc-800 hover:border-zinc-600'
+                      }`}
+                    >
+                      <span>👑</span>
+                      <span>{reactions.goat.toLocaleString()}</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleReaction('rage')}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold border transition-all ${
+                        userReaction === 'rage'
+                          ? 'bg-red-500/20 text-red-400 border-red-500/50 scale-105 shadow-sm'
+                          : 'bg-[#0F0F1A] text-zinc-300 border-zinc-800 hover:border-zinc-600'
+                      }`}
+                    >
+                      <span>💀</span>
+                      <span>{reactions.rage.toLocaleString()}</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
