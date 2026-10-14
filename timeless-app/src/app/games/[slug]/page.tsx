@@ -25,7 +25,7 @@ import Sidebar from '@/components/Sidebar';
 import GameTile from '@/components/GameTile';
 import AdSlot from '@/components/AdSlot';
 import Footer from '@/components/Footer';
-import { INITIAL_GAMES } from '@/data/games';
+import { INITIAL_GAMES, getActiveGames, isGameDeleted } from '@/data/games';
 import { Game } from '@/types/game';
 
 export default function GamePage() {
@@ -34,6 +34,8 @@ export default function GamePage() {
   const slug = params?.slug as string;
 
   const [game, setGame] = useState<Game | null>(null);
+  const [isDeleted, setIsDeleted] = useState(false);
+  const [deletedIds, setDeletedIds] = useState<string[]>([]);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const [isLoadingIframe, setIsLoadingIframe] = useState(true);
   const [isTheaterMode, setIsTheaterMode] = useState(false);
@@ -47,13 +49,51 @@ export default function GamePage() {
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
+  // Sync deleted games
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('timeless_deleted_game_ids');
+      if (stored) {
+        setDeletedIds(JSON.parse(stored));
+      }
+    } catch {}
+
+    const handleDeletedEvent = () => {
+      try {
+        const stored = localStorage.getItem('timeless_deleted_game_ids');
+        if (stored) {
+          setDeletedIds(JSON.parse(stored));
+        }
+      } catch {}
+    };
+
+    window.addEventListener('timeless-game-deleted', handleDeletedEvent);
+    window.addEventListener('storage', handleDeletedEvent);
+    return () => {
+      window.removeEventListener('timeless-game-deleted', handleDeletedEvent);
+      window.removeEventListener('storage', handleDeletedEvent);
+    };
+  }, []);
+
   // Find game
   useEffect(() => {
     if (!slug) return;
+
+    if (isGameDeleted(slug, deletedIds)) {
+      setIsDeleted(true);
+      return;
+    }
+
     const found = INITIAL_GAMES.find(
       (g) => g.slug === slug || (slug === 'sky-runner-endless-dash' && g.slug === 'temple-run-2')
     );
+
     if (found) {
+      if (isGameDeleted(found.id, deletedIds) || isGameDeleted(found.slug, deletedIds)) {
+        setIsDeleted(true);
+        return;
+      }
+      setIsDeleted(false);
       setGame(found);
       setLikesCount(found.likes);
       setDislikesCount(found.dislikes);
@@ -79,8 +119,30 @@ export default function GamePage() {
       } catch {
         // ignore
       }
+    } else {
+      setIsDeleted(false);
     }
-  }, [slug]);
+  }, [slug, deletedIds]);
+
+  if (isDeleted) {
+    return (
+      <div className="min-h-screen bg-[#0F0F1A] text-white flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-16 h-16 rounded-3xl bg-red-500/20 text-red-400 flex items-center justify-center mb-4 border border-red-500/30">
+          <ShieldAlert className="w-8 h-8" />
+        </div>
+        <h1 className="text-2xl font-black mb-2">Game Removed by Admin</h1>
+        <p className="text-zinc-400 text-sm max-w-md mb-6">
+          This game was removed from the Timeless Arcade catalog by the Master Administrator. It is no longer accessible on this website.
+        </p>
+        <Link
+          href="/"
+          className="px-6 py-3 rounded-full bg-[#7B3FF2] text-white font-bold text-sm hover:bg-[#905CF6] transition-all shadow-lg shadow-[#7B3FF2]/30"
+        >
+          Explore Other Games
+        </Link>
+      </div>
+    );
+  }
 
   if (!game) {
     return (
@@ -157,8 +219,9 @@ export default function GamePage() {
     setTimeout(() => setCopiedShare(false), 2500);
   };
 
-  // Related games from same category or popular
-  const relatedGames = INITIAL_GAMES.filter(
+  // Related games from active catalog
+  const activeGames = getActiveGames(deletedIds);
+  const relatedGames = activeGames.filter(
     (g) => g.id !== game.id && (g.category === game.category || g.featured)
   ).slice(0, 12);
 

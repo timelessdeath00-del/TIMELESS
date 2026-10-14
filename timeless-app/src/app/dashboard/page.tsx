@@ -214,22 +214,36 @@ function DashboardContent() {
           const userBio = dbProfile?.bio || 'Passionate gamer conquering the leaderboards on Timeless Games.';
           const genre = dbProfile?.favorite_genre || 'Action';
 
+          const isAdmin = authUser.email?.toLowerCase() === 'timelessdeath00@gmail.com';
+
           setUser({
-            id: authUser.id,
-            name,
+            id: isAdmin ? 'ADMIN-TIMELESS-001' : authUser.id,
+            name: isAdmin ? 'Master Admin' : name,
             email: authUser.email || '',
-            avatar,
-            bio: userBio,
+            avatar: isAdmin
+              ? 'https://images.unsplash.com/photo-1566492031773-4f4e44671857?w=200&auto=format&fit=crop&q=80'
+              : avatar,
+            bio: isAdmin
+              ? 'Chief System Architect and Master Administrator for TIMELESS Arcade.'
+              : userBio,
             favoriteGenre: genre,
-            role: dbProfile?.role || 'user',
+            role: isAdmin ? 'admin' : (dbProfile?.role || 'user'),
             createdAt: authUser.created_at,
             isSynced: !profileErr,
           });
 
-          setDisplayName(name);
-          setBio(userBio);
+          setDisplayName(isAdmin ? 'Master Admin' : name);
+          setBio(
+            isAdmin
+              ? 'Chief System Architect and Master Administrator for TIMELESS Arcade.'
+              : userBio
+          );
           setFavoriteGenre(genre);
-          setSelectedAvatar(avatar);
+          setSelectedAvatar(
+            isAdmin
+              ? 'https://images.unsplash.com/photo-1566492031773-4f4e44671857?w=200&auto=format&fit=crop&q=80'
+              : avatar
+          );
 
           // If dbProfile didn't exist yet in Supabase, create it now
           if (!dbProfile && !profileErr) {
@@ -237,24 +251,49 @@ function DashboardContent() {
               {
                 id: authUser.id,
                 email: authUser.email || '',
-                display_name: name,
+                display_name: isAdmin ? 'Master Admin' : name,
                 avatar_url: avatar,
+                role: isAdmin ? 'admin' : 'user',
                 updated_at: new Date().toISOString(),
               },
               { onConflict: 'id' }
             );
           }
         } else {
-          // Check for demo user session
+          // Check for admin session or demo user session
+          let adminData: any = null;
           let demoData: any = null;
           try {
+            const adminStored = localStorage.getItem('timeless_admin_session');
+            if (adminStored) adminData = JSON.parse(adminStored);
             const stored = localStorage.getItem('timeless_demo_user');
             if (stored) demoData = JSON.parse(stored);
           } catch {
             // ignore
           }
 
-          if (demoData) {
+          if (adminData) {
+            setIsLoggedIn(true);
+            setIsDemoUser(false);
+            setUser({
+              id: 'ADMIN-TIMELESS-001',
+              name: 'Master Admin',
+              email: 'timelessdeath00@gmail.com',
+              avatar:
+                adminData.avatar ||
+                'https://images.unsplash.com/photo-1566492031773-4f4e44671857?w=200&auto=format&fit=crop&q=80',
+              bio: 'Chief System Architect and Master Administrator for TIMELESS Arcade.',
+              favoriteGenre: 'All',
+              role: 'admin',
+              isSynced: true,
+            });
+            setDisplayName('Master Admin');
+            setBio('Chief System Architect and Master Administrator for TIMELESS Arcade.');
+            setSelectedAvatar(
+              adminData.avatar ||
+                'https://images.unsplash.com/photo-1566492031773-4f4e44671857?w=200&auto=format&fit=crop&q=80'
+            );
+          } else if (demoData) {
             setIsLoggedIn(true);
             setIsDemoUser(true);
             setUser({

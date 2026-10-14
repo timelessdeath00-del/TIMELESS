@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -16,7 +16,7 @@ import Sidebar from '@/components/Sidebar';
 import GameTile from '@/components/GameTile';
 import AdSlot from '@/components/AdSlot';
 import Footer from '@/components/Footer';
-import { INITIAL_GAMES } from '@/data/games';
+import { getActiveGames } from '@/data/games';
 import { CATEGORIES } from '@/data/categories';
 import { Game } from '@/types/game';
 
@@ -28,6 +28,29 @@ export default function CategoryPage() {
 
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>('popular');
+  const [deletedIds, setDeletedIds] = useState<string[]>([]);
+
+  // Sync deleted games
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('timeless_deleted_game_ids');
+      if (stored) setDeletedIds(JSON.parse(stored));
+    } catch {}
+
+    const handleDeletedEvent = () => {
+      try {
+        const stored = localStorage.getItem('timeless_deleted_game_ids');
+        if (stored) setDeletedIds(JSON.parse(stored));
+      } catch {}
+    };
+
+    window.addEventListener('timeless-game-deleted', handleDeletedEvent);
+    window.addEventListener('storage', handleDeletedEvent);
+    return () => {
+      window.removeEventListener('timeless-game-deleted', handleDeletedEvent);
+      window.removeEventListener('storage', handleDeletedEvent);
+    };
+  }, []);
 
   // Find category details or special slug
   const categoryInfo = CATEGORIES.find((c) => c.slug === slug);
@@ -47,9 +70,10 @@ export default function CategoryPage() {
     return categoryInfo?.description || 'Browse all free games in this collection.';
   }, [slug, categoryInfo]);
 
-  // Filter games
+  // Filter games from active catalog
   const filteredGames = useMemo(() => {
-    let list = INITIAL_GAMES.filter((g) => {
+    const activeList = getActiveGames(deletedIds);
+    let list = activeList.filter((g) => {
       if (slug === 'trending') return g.badge === 'HOT' || g.isHot || g.playsCount > 1000000;
       if (slug === 'new') return g.badge === 'NEW' || g.isNew;
       if (slug === 'top-rated') return g.badge === 'TOP RATED' || g.isTopRated || g.rating >= 4.8;
@@ -57,7 +81,7 @@ export default function CategoryPage() {
     });
 
     if (list.length === 0) {
-      list = INITIAL_GAMES; // Fallback so page is never empty
+      list = activeList; // Fallback so page is never empty
     }
 
     // Sort

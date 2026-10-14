@@ -1,4 +1,26 @@
 import { Game } from '@/types/game';
+import deletedIdsList from './deleted_games.json';
+
+export const DELETED_GAME_IDS: string[] = (deletedIdsList as string[]) || [];
+
+/**
+ * Returns all active games, filtering out any games that have been deleted by the admin
+ */
+export function getActiveGames(extraDeletedIds?: string[]): Game[] {
+  const allDeleted = new Set([...DELETED_GAME_IDS, ...(extraDeletedIds || [])]);
+  return INITIAL_GAMES.filter((g) => !allDeleted.has(g.id) && !allDeleted.has(g.slug));
+}
+
+/**
+ * Checks if a specific game has been deleted by ID or slug
+ */
+export function isGameDeleted(gameIdOrSlug: string, extraDeletedIds?: string[]): boolean {
+  const allDeleted = new Set([...DELETED_GAME_IDS, ...(extraDeletedIds || [])]);
+  if (allDeleted.has(gameIdOrSlug)) return true;
+  const game = INITIAL_GAMES.find((g) => g.id === gameIdOrSlug || g.slug === gameIdOrSlug);
+  if (game && (allDeleted.has(game.id) || allDeleted.has(game.slug))) return true;
+  return false;
+}
 
 export const INITIAL_GAMES: Game[] = [
   {
@@ -244,7 +266,7 @@ export const INITIAL_GAMES: Game[] = [
     instructions: 'WASD / Arrow Keys: Drive and steer your kart\nSpacebar: Fire equipped weapon / trigger power-up\nMouse / Camera: Look around arena\nDrive into glowing question mark boxes to pick up random weapons!',
     thumbnailUrl: '/games/smash-karts.png',
     embedType: 'iframe',
-    embedUrl: 'https://games.crazygames.com/en_US/smash-karts/index.html',
+    embedUrl: 'https://smashkarts.io',
     provider: 'custom',
     width: 800,
     height: 600,
@@ -298,7 +320,7 @@ export const INITIAL_GAMES: Game[] = [
     instructions: 'Up Arrow / W: Throttle / Accelerate\nDown Arrow / S: Brake\nLeft / Right Arrows or A / D: Steer motorbike\nY: Pop a Wheelie (bonus score)\nH: Sound Horn\nR: Shift Gear Up | F: Shift Gear Down\nT / U: Look Left / Right\nP or F1: Pause Game\nOvertake vehicles closely above 100 km/h for close-call bonus points and cash!',
     thumbnailUrl: '/games/traffic-rider.png',
     embedType: 'iframe',
-    embedUrl: 'https://games.crazygames.com/en_US/traffic-rider-vvq/index.html',
+    embedUrl: 'https://traffic-rider.io/traffic-rider.embed',
     provider: 'custom',
     width: 800,
     height: 450,
@@ -314,6 +336,61 @@ export const INITIAL_GAMES: Game[] = [
     isHot: true,
     badge: 'HOT',
     bentoSize: '2x1',
+  },
+  {
+    id: 'game-brawl-stars',
+    slug: 'brawl-stars',
+    title: 'Brawl Stars',
+    developer: 'Supercell',
+    releaseDate: 'December 12, 2018',
+    description: 'Play Brawl Stars free online in your web browser! In Brawl Stars, players compete in various high-intensity game modes to complete tactical objectives like gathering gems, holding territorial zones, cracking enemy vaults, or eliminating opponents in pulse-pounding 3-minute matches. Choose from an extensive roster of characters called Brawlers—spanning Damage Dealers, high-health frontline Tanks, agile Assassins, supportive Healers, long-range Marksmen snipers, and zone Controllers. Each Brawler is equipped with unique basic attacks, devastating game-changing Super abilities, and unlockable Gadgets, Star Powers, and Gears. Compete across rotating game modes including Gem Grab (3v3 battle for 10 gems), Showdown (Solo and Duo battle royale survival), Brawl Ball (high-energy 3v3 soccer combat), Heist (crack open the enemy safe while defending your own), Bounty (collect stars through tactical eliminations), Hot Zone (capture and defend key zones for points), and Knockout (elimination rounds with no respawns). Smooth, responsive HTML5 controls deliver the ultimate arcade MOBA rush directly on desktop, phone, or tablet without downloads!',
+    instructions: 'WASD or Arrow Keys: Move Brawler\nMouse Left Click / Aim: Aim and shoot primary attack\nSpacebar / Right Click: Unleash signature Super ability\nE: Activate Gadget (when unlocked)\nMobile: Left virtual joystick to move, Right joystick to aim and shoot attack/super',
+    thumbnailUrl: '/games/brawl-stars.png',
+    embedType: 'iframe',
+    embedUrl: 'https://www.madkidgames.com/full/brawl-stars',
+    provider: 'custom',
+    width: 800,
+    height: 600,
+    orientation: 'landscape',
+    mobileFriendly: true,
+    category: 'action',
+    tags: ['Brawl Stars', 'Supercell', 'MOBA', 'Hero Shooter', 'Multiplayer', 'Action', '3v3', 'Battle Royale', 'Gem Grab', 'Showdown', 'PvP'],
+    playsCount: 12800000,
+    likes: 3200000,
+    dislikes: 145000,
+    rating: 4.9,
+    featured: true,
+    isHot: true,
+    badge: 'HOT',
+    bentoSize: '2x1',
+  },
+  {
+    id: 'game-kick-the-buddy',
+    slug: 'kick-the-buddy',
+    title: 'Kick the Buddy',
+    developer: 'Playgendary / GameDistribution',
+    releaseDate: 'May 2018',
+    description: "Play Kick the Buddy free online, the ultimate anti-stress interactive ragdoll action game! Looking for an entertaining way to relax, unwind, and blow off steam after a stressful day? Kick The Buddy gives you total creative freedom to play, experiment, and release pent-up energy in a fun, light-hearted sandbox environment. Whether kicking, tossing, stretching, or punching Buddy around the interactive chamber, it is pure stress-relieving entertainment with zero real-world consequences—Buddy is an indestructible smiley ragdoll dummy who bounces back from everything! Unlock and experiment with an enormous arsenal of humorous gadgets, boxing gloves, water balloons, anvils, laser beams, fireworks, and kinetic traps. Experience satisfying ragdoll physics, hilarious voice lines, and vibrant reactive animations. Kick the Buddy is the perfect anti-stress companion on desktop, mobile, and tablet!",
+    instructions: 'Mouse Click & Drag / Touch & Swipe: Grab Buddy, toss across the room, and throw into walls\nClick on Buddy repeatedly: Punch and slap\nSelect Weapons from Menu: Click anywhere to fire pistols, launch rockets, or drop anvils\nEarn coins to unlock new weapons, funny costumes, and interactive chamber backgrounds!',
+    thumbnailUrl: '/games/kick-the-buddy.png',
+    embedType: 'iframe',
+    embedUrl: 'https://html5.gamedistribution.com/ba6536cbacbb4b80a7da9f117308326a/?gd_sdk_referrer_url=https://timelessgames.com/games/kick-the-buddy',
+    provider: 'gamedistribution',
+    providerGameId: 'ba6536cbacbb4b80a7da9f117308326a',
+    width: 800,
+    height: 600,
+    orientation: 'both',
+    mobileFriendly: true,
+    category: 'arcade',
+    tags: ['Kick the Buddy', 'Ragdoll', 'Anti Stress', 'Relaxation', 'Physics', 'Action', 'Fun', 'Funny', 'Casual', 'Stress Relief'],
+    playsCount: 8450000,
+    likes: 980000,
+    dislikes: 42000,
+    rating: 4.8,
+    featured: true,
+    isNew: true,
+    badge: 'NEW',
+    bentoSize: '1x1',
   },
   {
     id: 'game-hot-wheels-race-off',

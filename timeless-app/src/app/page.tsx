@@ -22,13 +22,42 @@ import GameTile from '@/components/GameTile';
 import AdSlot from '@/components/AdSlot';
 import Footer from '@/components/Footer';
 import CookieBanner from '@/components/CookieBanner';
-import { INITIAL_GAMES } from '@/data/games';
+import { getActiveGames } from '@/data/games';
 import { Game } from '@/types/game';
 
 export default function HomePage() {
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const [recentlyPlayed, setRecentlyPlayed] = useState<Game[]>([]);
+  const [deletedIds, setDeletedIds] = useState<string[]>([]);
   const featuredRowRef = useRef<HTMLDivElement>(null);
+
+  // Sync deleted games from localStorage and listen to real-time deletion events
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('timeless_deleted_game_ids');
+      if (stored) {
+        setDeletedIds(JSON.parse(stored));
+      }
+    } catch {}
+
+    const handleDeletedEvent = () => {
+      try {
+        const stored = localStorage.getItem('timeless_deleted_game_ids');
+        if (stored) {
+          setDeletedIds(JSON.parse(stored));
+        }
+      } catch {}
+    };
+
+    window.addEventListener('timeless-game-deleted', handleDeletedEvent);
+    window.addEventListener('storage', handleDeletedEvent);
+    return () => {
+      window.removeEventListener('timeless-game-deleted', handleDeletedEvent);
+      window.removeEventListener('storage', handleDeletedEvent);
+    };
+  }, []);
+
+  const activeGames = getActiveGames(deletedIds);
 
   // Load recently played games from localStorage
   useEffect(() => {
@@ -37,14 +66,14 @@ export default function HomePage() {
       if (stored) {
         const slugs: string[] = JSON.parse(stored);
         const games = slugs
-          .map((slug) => INITIAL_GAMES.find((g) => g.slug === slug))
+          .map((slug) => activeGames.find((g) => g.slug === slug))
           .filter(Boolean) as Game[];
         setRecentlyPlayed(games.slice(0, 6));
       }
     } catch {
       // ignore
     }
-  }, []);
+  }, [deletedIds]);
 
   const scrollFeatured = (direction: 'left' | 'right') => {
     if (featuredRowRef.current) {
@@ -53,24 +82,19 @@ export default function HomePage() {
     }
   };
 
-  // Bento games
-  const bentoLeft = INITIAL_GAMES[0]; // 2x2
-  const bentoMiddle = [
-    INITIAL_GAMES[2], // Capybara 1x1
-    INITIAL_GAMES[3], // Shell Shockers 1x1
-    INITIAL_GAMES[4], // Crazy Roll 1x1
-    INITIAL_GAMES[5], // Cubes 2048 1x1
-  ];
-  const bentoRight = INITIAL_GAMES[1]; // 2x2
+  // Bento games from active catalog
+  const bentoLeft = activeGames[0] || null; // 2x2
+  const bentoMiddle = activeGames.slice(2, 6);
+  const bentoRight = activeGames[1] || null; // 2x2
 
   // Category slices
-  const featuredRowGames = INITIAL_GAMES.slice(6, 14);
-  const newGames = INITIAL_GAMES.filter((g) => g.badge === 'NEW' || g.isNew).slice(0, 8);
-  const trendingGames = INITIAL_GAMES.filter((g) => g.badge === 'HOT' || g.isHot).slice(0, 8);
-  const racingGames = INITIAL_GAMES.filter((g) => g.category === 'racing').slice(0, 6);
-  const actionGames = INITIAL_GAMES.filter((g) => g.category === 'action' || g.category === 'shooting').slice(0, 6);
-  const puzzleGames = INITIAL_GAMES.filter((g) => g.category === 'puzzle').slice(0, 6);
-  const multiplayerGames = INITIAL_GAMES.filter((g) => g.category === 'multiplayer' || g.category === '2-player').slice(0, 6);
+  const featuredRowGames = activeGames.slice(6, 14);
+  const newGames = activeGames.filter((g) => g.badge === 'NEW' || g.isNew).slice(0, 8);
+  const trendingGames = activeGames.filter((g) => g.badge === 'HOT' || g.isHot).slice(0, 8);
+  const racingGames = activeGames.filter((g) => g.category === 'racing').slice(0, 6);
+  const actionGames = activeGames.filter((g) => g.category === 'action' || g.category === 'shooting').slice(0, 6);
+  const puzzleGames = activeGames.filter((g) => g.category === 'puzzle').slice(0, 6);
+  const multiplayerGames = activeGames.filter((g) => g.category === 'multiplayer' || g.category === '2-player').slice(0, 6);
 
   return (
     <div className="min-h-screen bg-[#0F0F1A] text-zinc-100 flex flex-col">

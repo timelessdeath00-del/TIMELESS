@@ -1,6 +1,6 @@
 'use client';
 
-import React, { Suspense, useState, useMemo } from 'react';
+import React, { Suspense, useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Search as SearchIcon, ChevronRight } from 'lucide-react';
@@ -9,24 +9,47 @@ import Sidebar from '@/components/Sidebar';
 import GameTile from '@/components/GameTile';
 import AdSlot from '@/components/AdSlot';
 import Footer from '@/components/Footer';
-import { INITIAL_GAMES } from '@/data/games';
+import { getActiveGames } from '@/data/games';
 
 function SearchContent() {
   const searchParams = useSearchParams();
   const query = searchParams?.get('q') || '';
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
+  const [deletedIds, setDeletedIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('timeless_deleted_game_ids');
+      if (stored) setDeletedIds(JSON.parse(stored));
+    } catch {}
+
+    const handleDeletedEvent = () => {
+      try {
+        const stored = localStorage.getItem('timeless_deleted_game_ids');
+        if (stored) setDeletedIds(JSON.parse(stored));
+      } catch {}
+    };
+
+    window.addEventListener('timeless-game-deleted', handleDeletedEvent);
+    window.addEventListener('storage', handleDeletedEvent);
+    return () => {
+      window.removeEventListener('timeless-game-deleted', handleDeletedEvent);
+      window.removeEventListener('storage', handleDeletedEvent);
+    };
+  }, []);
 
   const results = useMemo(() => {
     if (!query.trim()) return [];
     const q = query.toLowerCase();
-    return INITIAL_GAMES.filter(
+    const activeList = getActiveGames(deletedIds);
+    return activeList.filter(
       (g) =>
         g.title.toLowerCase().includes(q) ||
         g.category.toLowerCase().includes(q) ||
         g.tags.some((t) => t.toLowerCase().includes(q)) ||
         g.description.toLowerCase().includes(q)
     );
-  }, [query]);
+  }, [query, deletedIds]);
 
   return (
     <div className="min-h-screen bg-[#0F0F1A] text-zinc-100 flex flex-col">

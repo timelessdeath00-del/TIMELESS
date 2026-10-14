@@ -18,8 +18,11 @@ import {
   LogIn,
   LogOut,
   ChevronRight,
+  ShieldCheck,
+  Crown,
+  KeyRound,
 } from 'lucide-react';
-import { INITIAL_GAMES } from '@/data/games';
+import { INITIAL_GAMES, getActiveGames } from '@/data/games';
 import { Game } from '@/types/game';
 
 import { createClient } from '@/lib/supabase/client';
@@ -29,6 +32,14 @@ interface HeaderProps {
   isSidebarExpanded?: boolean;
 }
 
+interface AuthUser {
+  name: string;
+  email: string;
+  avatar: string;
+  role?: string;
+  profileId?: string;
+}
+
 export default function Header({ onToggleSidebar, isSidebarExpanded }: HeaderProps) {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
@@ -36,8 +47,13 @@ export default function Header({ onToggleSidebar, isSidebarExpanded }: HeaderPro
   const [searchResults, setSearchResults] = useState<Game[]>([]);
   const [isDark, setIsDark] = useState(true);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [user, setUser] = useState<{ name: string; email: string; avatar: string } | null>(null);
+  const [authTab, setAuthTab] = useState<'signin' | 'admin'>('signin');
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [favoritesCount, setFavoritesCount] = useState(0);
+  const [deletedIds, setDeletedIds] = useState<string[]>([]);
 
   const searchRef = useRef<HTMLDivElement>(null);
 
@@ -76,13 +92,22 @@ export default function Header({ onToggleSidebar, isSidebarExpanded }: HeaderPro
       }
 
       if (activeUser) {
-        const name = activeUser.user_metadata?.full_name || activeUser.user_metadata?.name || activeUser.email?.split('@')[0] || 'Player';
-        const avatar = activeUser.user_metadata?.avatar_url || activeUser.user_metadata?.picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80';
-        setUser({
+        const isAdmin = activeUser.email?.toLowerCase() === 'timelessdeath00@gmail.com';
+        const name = isAdmin
+          ? 'Master Admin'
+          : activeUser.user_metadata?.full_name || activeUser.user_metadata?.name || activeUser.email?.split('@')[0] || 'Player';
+        const avatar = isAdmin
+          ? 'https://images.unsplash.com/photo-1566492031773-4f4e44671857?w=200&auto=format&fit=crop&q=80'
+          : activeUser.user_metadata?.avatar_url || activeUser.user_metadata?.picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80';
+
+        const authedUser: AuthUser = {
           name,
           email: activeUser.email || '',
           avatar,
-        });
+          role: isAdmin ? 'admin' : 'user',
+          profileId: isAdmin ? 'ADMIN-TIMELESS-001' : (activeUser.id || 'PLAYER-001'),
+        };
+        setUser(authedUser);
 
         // Ensure saved in Supabase 'profiles' database table
         try {
@@ -92,6 +117,7 @@ export default function Header({ onToggleSidebar, isSidebarExpanded }: HeaderPro
               email: activeUser.email || '',
               display_name: name,
               avatar_url: avatar,
+              role: isAdmin ? 'admin' : 'user',
               updated_at: new Date().toISOString(),
             },
             { onConflict: 'id' }
@@ -100,21 +126,25 @@ export default function Header({ onToggleSidebar, isSidebarExpanded }: HeaderPro
           console.warn('Profile sync notice:', profileErr);
         }
 
-        // If user just signed in via OAuth redirect, smoothly guide them to their dashboard profile
+        // If user just signed in via OAuth redirect, smoothly guide them
         if (typeof window !== 'undefined') {
           const params = new URLSearchParams(window.location.search);
           if (params.has('code') || window.location.pathname === '/') {
-            // Give a tiny tick for state hydration then route to dashboard
             setTimeout(() => {
               if (window.location.pathname === '/') {
-                router.push('/dashboard');
+                router.push(isAdmin ? '/profile/timelessdeath00' : '/dashboard');
               }
             }, 500);
           }
         }
       } else {
-        // Check for local demo user session
+        // Check for local admin or demo user session
         try {
+          const adminSession = localStorage.getItem('timeless_admin_session');
+          if (adminSession) {
+            setUser(JSON.parse(adminSession));
+            return;
+          }
           const demo = localStorage.getItem('timeless_demo_user');
           if (demo) {
             setUser(JSON.parse(demo));
@@ -132,13 +162,22 @@ export default function Header({ onToggleSidebar, isSidebarExpanded }: HeaderPro
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
         const u = session.user;
-        const name = u.user_metadata?.full_name || u.user_metadata?.name || u.email?.split('@')[0] || 'Player';
-        const avatar = u.user_metadata?.avatar_url || u.user_metadata?.picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80';
-        setUser({
+        const isAdmin = u.email?.toLowerCase() === 'timelessdeath00@gmail.com';
+        const name = isAdmin
+          ? 'Master Admin'
+          : u.user_metadata?.full_name || u.user_metadata?.name || u.email?.split('@')[0] || 'Player';
+        const avatar = isAdmin
+          ? 'https://images.unsplash.com/photo-1566492031773-4f4e44671857?w=200&auto=format&fit=crop&q=80'
+          : u.user_metadata?.avatar_url || u.user_metadata?.picture || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80';
+
+        const authedUser: AuthUser = {
           name,
           email: u.email || '',
           avatar,
-        });
+          role: isAdmin ? 'admin' : 'user',
+          profileId: isAdmin ? 'ADMIN-TIMELESS-001' : (u.id || 'PLAYER-001'),
+        };
+        setUser(authedUser);
 
         try {
           await supabase.from('profiles').upsert(
@@ -147,6 +186,7 @@ export default function Header({ onToggleSidebar, isSidebarExpanded }: HeaderPro
               email: u.email || '',
               display_name: name,
               avatar_url: avatar,
+              role: isAdmin ? 'admin' : 'user',
               updated_at: new Date().toISOString(),
             },
             { onConflict: 'id' }
@@ -156,6 +196,11 @@ export default function Header({ onToggleSidebar, isSidebarExpanded }: HeaderPro
         }
       } else {
         try {
+          const adminSession = localStorage.getItem('timeless_admin_session');
+          if (adminSession) {
+            setUser(JSON.parse(adminSession));
+            return;
+          }
           const demo = localStorage.getItem('timeless_demo_user');
           if (demo) {
             setUser(JSON.parse(demo));
@@ -172,6 +217,28 @@ export default function Header({ onToggleSidebar, isSidebarExpanded }: HeaderPro
       subscription.unsubscribe();
     };
   }, [router]);
+
+  // Sync deleted games from localStorage and window events
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('timeless_deleted_game_ids');
+      if (stored) setDeletedIds(JSON.parse(stored));
+    } catch {}
+
+    const handleDeletedEvent = () => {
+      try {
+        const stored = localStorage.getItem('timeless_deleted_game_ids');
+        if (stored) setDeletedIds(JSON.parse(stored));
+      } catch {}
+    };
+
+    window.addEventListener('timeless-game-deleted', handleDeletedEvent);
+    window.addEventListener('storage', handleDeletedEvent);
+    return () => {
+      window.removeEventListener('timeless-game-deleted', handleDeletedEvent);
+      window.removeEventListener('storage', handleDeletedEvent);
+    };
+  }, []);
 
   // Sync favorites count from local storage
   useEffect(() => {
@@ -195,21 +262,22 @@ export default function Header({ onToggleSidebar, isSidebarExpanded }: HeaderPro
     };
   }, []);
 
-  // Filter search queries
+  // Filter search queries from active games only
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults([]);
       return;
     }
     const q = searchQuery.toLowerCase();
-    const matches = INITIAL_GAMES.filter(
+    const activeCatalog = getActiveGames(deletedIds);
+    const matches = activeCatalog.filter(
       (g) =>
         g.title.toLowerCase().includes(q) ||
         g.category.toLowerCase().includes(q) ||
         g.tags.some((t) => t.toLowerCase().includes(q))
     ).slice(0, 6);
     setSearchResults(matches);
-  }, [searchQuery]);
+  }, [searchQuery, deletedIds]);
 
   // Click outside to close search dropdown
   useEffect(() => {
@@ -231,8 +299,10 @@ export default function Header({ onToggleSidebar, isSidebarExpanded }: HeaderPro
   };
 
   const handleRandomGame = () => {
-    const randomIndex = Math.floor(Math.random() * INITIAL_GAMES.length);
-    const randomGame = INITIAL_GAMES[randomIndex];
+    const activeCatalog = getActiveGames(deletedIds);
+    if (activeCatalog.length === 0) return;
+    const randomIndex = Math.floor(Math.random() * activeCatalog.length);
+    const randomGame = activeCatalog[randomIndex];
     router.push(`/games/${randomGame.slug}`);
   };
 
@@ -261,6 +331,71 @@ export default function Header({ onToggleSidebar, isSidebarExpanded }: HeaderPro
     }
   };
 
+  const handlePasswordSignIn = (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError('');
+    const emailNorm = loginEmail.trim().toLowerCase();
+    const pass = loginPassword.trim();
+
+    if (emailNorm === 'timelessdeath00@gmail.com' && pass === 'TIME00100') {
+      const adminUser: AuthUser = {
+        name: 'Master Admin',
+        email: 'timelessdeath00@gmail.com',
+        avatar: 'https://images.unsplash.com/photo-1566492031773-4f4e44671857?w=200&auto=format&fit=crop&q=80',
+        role: 'admin',
+        profileId: 'ADMIN-TIMELESS-001',
+      };
+      try {
+        localStorage.setItem('timeless_admin_session', JSON.stringify(adminUser));
+      } catch {}
+      setUser(adminUser);
+      setIsAuthModalOpen(false);
+      router.push('/profile/timelessdeath00');
+      return;
+    }
+
+    if (emailNorm === 'timelessdeath00@gmail.com' && pass !== 'TIME00100') {
+      setLoginError('Invalid password ID for master admin account.');
+      return;
+    }
+
+    if (pass.length < 6) {
+      setLoginError('Password must be at least 6 characters');
+      return;
+    }
+
+    // Standard player login
+    const normalUser: AuthUser = {
+      name: emailNorm.split('@')[0] || 'Player',
+      email: emailNorm,
+      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80',
+      role: 'user',
+      profileId: `PLAYER-${Math.floor(1000 + Math.random() * 9000)}`,
+    };
+    try {
+      localStorage.setItem('timeless_demo_user', JSON.stringify(normalUser));
+    } catch {}
+    setUser(normalUser);
+    setIsAuthModalOpen(false);
+    router.push('/dashboard');
+  };
+
+  const handleMasterAdminOneClick = () => {
+    const adminUser: AuthUser = {
+      name: 'Master Admin',
+      email: 'timelessdeath00@gmail.com',
+      avatar: 'https://images.unsplash.com/photo-1566492031773-4f4e44671857?w=200&auto=format&fit=crop&q=80',
+      role: 'admin',
+      profileId: 'ADMIN-TIMELESS-001',
+    };
+    try {
+      localStorage.setItem('timeless_admin_session', JSON.stringify(adminUser));
+    } catch {}
+    setUser(adminUser);
+    setIsAuthModalOpen(false);
+    router.push('/profile/timelessdeath00');
+  };
+
   const handleLogout = async () => {
     try {
       const supabase = createClient();
@@ -270,15 +405,18 @@ export default function Header({ onToggleSidebar, isSidebarExpanded }: HeaderPro
     }
     try {
       localStorage.removeItem('timeless_demo_user');
+      localStorage.removeItem('timeless_admin_session');
     } catch {}
     setUser(null);
   };
 
   const handleDemoLogin = () => {
-    const demoUser = {
+    const demoUser: AuthUser = {
       name: 'Player One',
       email: 'player.one@timelessgames.com',
       avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80',
+      role: 'user',
+      profileId: 'PLAYER-DEMO-001',
     };
     try {
       localStorage.setItem('timeless_demo_user', JSON.stringify(demoUser));
@@ -428,15 +566,32 @@ export default function Header({ onToggleSidebar, isSidebarExpanded }: HeaderPro
           {/* User Auth */}
           {user ? (
             <div className="flex items-center gap-2">
+              {/* Master Admin Console Shortcut */}
+              {(user.role === 'admin' || user.email === 'timelessdeath00@gmail.com') && (
+                <Link
+                  href="/admin"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-amber-500/20 via-purple-600/30 to-indigo-600/30 border border-amber-500/40 text-amber-300 text-xs font-black hover:brightness-125 transition-all shadow-md shadow-amber-500/10"
+                  title="Master Admin Console"
+                >
+                  <Crown className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="hidden sm:inline">Admin Console</span>
+                </Link>
+              )}
+
               <Link
-                href="/dashboard"
+                href={user.role === 'admin' || user.email === 'timelessdeath00@gmail.com' ? '/profile/timelessdeath00' : '/dashboard'}
                 className="flex items-center gap-2 p-1 pl-2 pr-3 rounded-full bg-[#171726] border border-[#26263B] hover:border-[#7B3FF2] transition-colors"
-                title="Go to Dashboard"
+                title={user.role === 'admin' ? 'Master Admin Profile' : 'Go to Dashboard'}
               >
-                <div className="w-7 h-7 rounded-full overflow-hidden bg-purple-600 relative">
+                <div className="w-7 h-7 rounded-full overflow-hidden bg-purple-600 relative border border-purple-400/40">
                   <Image src={user.avatar} alt={user.name} fill className="object-cover" />
                 </div>
-                <span className="text-xs font-bold text-zinc-200 hidden sm:inline">{user.name}</span>
+                <div className="flex flex-col text-left hidden sm:flex">
+                  <span className="text-xs font-bold text-zinc-200">{user.name}</span>
+                  {user.role === 'admin' && (
+                    <span className="text-[9px] font-black text-amber-400 leading-none">ADMIN</span>
+                  )}
+                </div>
               </Link>
               <button
                 onClick={handleLogout}
@@ -458,7 +613,7 @@ export default function Header({ onToggleSidebar, isSidebarExpanded }: HeaderPro
         </div>
       </header>
 
-      {/* Google OAuth Modal */}
+      {/* Auth Modal with Normal Password & Google Sign-In */}
       {isAuthModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="w-full max-w-sm rounded-3xl border border-[#26263B] bg-[#171726] p-6 shadow-2xl relative text-center">
@@ -469,19 +624,19 @@ export default function Header({ onToggleSidebar, isSidebarExpanded }: HeaderPro
               <X className="w-4 h-4" />
             </button>
 
-            <div className="w-14 h-14 mx-auto rounded-2xl bg-[#7B3FF2]/20 border border-[#7B3FF2]/40 flex items-center justify-center text-[#A78BFA] mb-4">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-[#7B3FF2]/20 border border-[#7B3FF2]/40 flex items-center justify-center text-[#A78BFA] mb-3">
               <Gamepad2 className="w-8 h-8 text-[#7B3FF2]" />
             </div>
 
             <h3 className="text-xl font-black text-white">Join Timeless Games</h3>
-            <p className="text-xs text-zinc-400 mt-1 mb-6">
-              Save your progress, unlock achievements, sync favorites, and join global leaderboards.
+            <p className="text-xs text-zinc-400 mt-1 mb-4">
+              Sign in with your Google account or Master Admin credentials.
             </p>
 
             {/* Google OAuth Button */}
             <button
               onClick={handleGoogleLogin}
-              className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-full bg-white text-zinc-900 font-bold text-sm hover:bg-zinc-100 transition-all shadow-md active:scale-95"
+              className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-full bg-white text-zinc-900 font-bold text-xs sm:text-sm hover:bg-zinc-100 transition-all shadow-md active:scale-95 mb-3"
             >
               <svg className="w-4 h-4" viewBox="0 0 24 24">
                 <path
@@ -504,28 +659,80 @@ export default function Header({ onToggleSidebar, isSidebarExpanded }: HeaderPro
               <span>Continue with Google</span>
             </button>
 
-            {/* Instant Demo Sign-in */}
-            <div className="relative my-4">
+            {/* Normal Email / Password Form */}
+            <form onSubmit={handlePasswordSignIn} className="space-y-2.5 my-3 text-left">
+              <div>
+                <label className="block text-[11px] font-bold text-zinc-300 mb-1">Email</label>
+                <input
+                  type="email"
+                  required
+                  placeholder="timelessdeath00@gmail.com"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[#0F0F1A] border border-[#26263B] text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#7B3FF2]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-zinc-300 mb-1">Password ID</label>
+                <input
+                  type="password"
+                  required
+                  placeholder="TIME00100"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[#0F0F1A] border border-[#26263B] text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#7B3FF2]"
+                />
+              </div>
+
+              {loginError && (
+                <p className="text-[11px] font-bold text-red-400 bg-red-500/10 p-2 rounded-lg border border-red-500/20">
+                  {loginError}
+                </p>
+              )}
+
+              <button
+                type="submit"
+                className="w-full py-2.5 rounded-xl bg-[#7B3FF2] hover:bg-[#905CF6] text-white text-xs font-bold transition-all shadow-md shadow-[#7B3FF2]/20 active:scale-95"
+              >
+                Sign In With Password
+              </button>
+            </form>
+
+            {/* Quick 1-Click Shortcuts */}
+            <div className="relative my-3">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-[#26263B]"></div>
               </div>
               <div className="relative flex justify-center text-[10px] uppercase">
-                <span className="bg-[#171726] px-2 text-zinc-500 font-bold">Or quick test</span>
+                <span className="bg-[#171726] px-2 text-zinc-500 font-bold">1-Click Shortcuts</span>
               </div>
             </div>
 
-            <button
-              onClick={handleDemoLogin}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-full bg-[#26263B] text-zinc-200 font-bold text-xs hover:bg-[#35354e] hover:text-white transition-all border border-[#3b3b55]"
-            >
-              <Sparkles className="w-4 h-4 text-amber-400" />
-              <span>Instant Test Sign-In (Player One)</span>
-            </button>
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={handleMasterAdminOneClick}
+                className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500/20 to-purple-600/20 text-amber-300 font-bold text-xs hover:brightness-125 transition-all border border-amber-500/30"
+              >
+                <Crown className="w-3.5 h-3.5 text-amber-400" />
+                <span>Master Admin (timelessdeath00)</span>
+              </button>
 
-            <p className="text-[11px] text-zinc-500 mt-4">
+              <button
+                type="button"
+                onClick={handleDemoLogin}
+                className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-[#26263B] text-zinc-300 font-bold text-xs hover:bg-[#35354e] hover:text-white transition-all border border-[#3b3b55]"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                <span>Guest Player One Demo</span>
+              </button>
+            </div>
+
+            <p className="text-[10px] text-zinc-500 mt-4">
               By continuing you agree to our{' '}
               <Link href="/terms" className="underline hover:text-zinc-300">
-                Terms of Service
+                Terms
               </Link>{' '}
               and{' '}
               <Link href="/privacy" className="underline hover:text-zinc-300">

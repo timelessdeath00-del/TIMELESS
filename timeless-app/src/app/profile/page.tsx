@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
 
 export default function ProfilePage() {
-  redirect('/dashboard?tab=settings');
+  redirect('/profile/timelessdeath00');
 }
