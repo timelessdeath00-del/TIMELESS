@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   Flame,
   Sparkles,
@@ -15,6 +16,8 @@ import {
   Puzzle,
   Sword,
   Users,
+  Play,
+  Zap,
 } from 'lucide-react';
 import Header from '@/components/Header';
 import Sidebar from '@/components/Sidebar';
@@ -97,6 +100,25 @@ export default function HomePage() {
   const bentoMiddle = activeGames.slice(2, 6);
   const bentoRight = activeGames[1] || null; // 2x2
 
+  // Flagship Hero Game Spotlight (e.g. Brawl Stars, Ragdoll Archers, or first active)
+  const heroGame =
+    activeGames.find((g) => g.slug === 'brawl-stars') ||
+    activeGames.find((g) => g.slug === 'ragdoll-archers') ||
+    activeGames[0] ||
+    null;
+
+  // Category quick filter items
+  const quickCategories = [
+    { label: 'All Games', href: '/', icon: Gamepad2, active: true },
+    { label: 'Trending', href: '/category/trending', icon: Flame },
+    { label: 'New Releases', href: '/category/new', icon: Sparkles },
+    { label: 'Action & Combat', href: '/category/action', icon: Sword },
+    { label: 'Racing & Speed', href: '/category/racing', icon: Car },
+    { label: 'Puzzle & Logic', href: '/category/puzzle', icon: Puzzle },
+    { label: 'Multiplayer', href: '/category/multiplayer', icon: Users },
+    { label: 'Top Rated', href: '/category/top-rated', icon: Trophy },
+  ];
+
   // Category slices
   const featuredRowGames = activeGames.slice(6, 14);
   const newGames = activeGames.filter((g) => g.badge === 'NEW' || g.isNew).slice(0, 8);
@@ -130,6 +152,101 @@ export default function HomePage() {
         >
           {/* Header Ad Leaderboard */}
           <AdSlot placement="header-leaderboard" />
+
+          {/* Quick Categories Horizontal Ribbon */}
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-2 my-3">
+            {quickCategories.map((cat) => {
+              const Icon = cat.icon;
+              return (
+                <Link
+                  key={cat.label}
+                  href={cat.href}
+                  className={`flex items-center gap-2 px-3.5 py-2 rounded-2xl text-xs font-bold shrink-0 transition-all ${
+                    cat.active
+                      ? 'bg-gradient-to-r from-[#7B3FF2] to-[#905CF6] text-white shadow-lg shadow-[#7B3FF2]/30 scale-102'
+                      : 'bg-[#171726] border border-[#26263B] text-zinc-300 hover:text-white hover:border-[#7B3FF2]/50 hover:bg-[#1E1E30]'
+                  }`}
+                >
+                  <Icon className="w-4 h-4 text-amber-400" />
+                  <span>{cat.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+
+          {/* Hero Spotlight Game Banner */}
+          {heroGame && (
+            <section className="mb-8 relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#1D1836] via-[#171726] to-[#12121E] border border-[#7B3FF2]/40 shadow-2xl p-5 sm:p-7 group">
+              <div className="absolute -top-16 -right-16 w-96 h-96 bg-[#7B3FF2]/20 rounded-full blur-3xl pointer-events-none group-hover:bg-[#7B3FF2]/30 transition-colors" />
+              <div className="absolute -bottom-16 -left-16 w-96 h-96 bg-pink-500/10 rounded-full blur-3xl pointer-events-none" />
+
+              <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+                <div className="flex-1 text-center md:text-left">
+                  <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 mb-3">
+                    <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-amber-500 to-orange-500 text-black shadow-md flex items-center gap-1">
+                      <Flame className="w-3 h-3 fill-black" />
+                      <span>Game of the Week</span>
+                    </span>
+                    <span className="px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-[#7B3FF2]/20 text-[#A78BFA] border border-[#7B3FF2]/40">
+                      {heroGame.category}
+                    </span>
+                    <span className="text-xs text-amber-400 font-bold flex items-center gap-1">
+                      <Star className="w-3.5 h-3.5 fill-amber-400" />
+                      <span>{heroGame.rating}</span>
+                    </span>
+                  </div>
+
+                  <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight leading-tight mb-2">
+                    {heroGame.title}
+                  </h1>
+                  <p className="text-xs sm:text-sm text-zinc-300 max-w-xl line-clamp-2 leading-relaxed mb-6">
+                    {heroGame.description}
+                  </p>
+
+                  <div className="flex flex-wrap items-center justify-center md:justify-start gap-3">
+                    <Link
+                      href={`/games/${heroGame.slug}`}
+                      className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-gradient-to-r from-[#7B3FF2] to-[#905CF6] text-white font-black text-sm shadow-xl shadow-[#7B3FF2]/40 hover:scale-105 active:scale-95 transition-all"
+                    >
+                      <Play className="w-4 h-4 fill-white" />
+                      <span>Play Now Free</span>
+                    </Link>
+                    <button
+                      onClick={() => {
+                        const activeCatalog = getActiveGames(deletedIds);
+                        if (activeCatalog.length > 0) {
+                          const random = activeCatalog[Math.floor(Math.random() * activeCatalog.length)];
+                          window.location.href = `/games/${random.slug}`;
+                        }
+                      }}
+                      className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-[#0F0F1A] border border-[#26263B] text-zinc-300 hover:text-white hover:border-zinc-500 font-bold text-xs transition-colors"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Surprise Me</span>
+                    </button>
+                  </div>
+                </div>
+
+                <Link
+                  href={`/games/${heroGame.slug}`}
+                  className="relative w-full md:w-80 h-48 sm:h-56 rounded-2xl overflow-hidden border border-[#26263B] shadow-2xl group/thumb shrink-0 block"
+                >
+                  <Image
+                    src={heroGame.thumbnailUrl}
+                    alt={heroGame.title}
+                    fill
+                    className="object-cover group-hover/thumb:scale-105 transition-transform duration-300"
+                    priority
+                  />
+                  <div className="absolute inset-0 bg-black/30 group-hover/thumb:bg-black/10 transition-colors flex items-center justify-center">
+                    <div className="w-14 h-14 rounded-full bg-[#7B3FF2]/90 text-white flex items-center justify-center shadow-2xl scale-90 group-hover/thumb:scale-110 transition-transform">
+                      <Play className="w-6 h-6 fill-white ml-1" />
+                    </div>
+                  </div>
+                </Link>
+              </div>
+            </section>
+          )}
 
           {/* SECTION 1: Recommended For You (CrazyGames & Poki Bento Grid) */}
           <section className="mb-8">
