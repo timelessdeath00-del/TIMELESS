@@ -148,6 +148,107 @@ export default function GamePage() {
     }
   }, [slug, deletedIds]);
 
+  // Fullscreen trigger
+  const handleFullscreen = () => {
+    if (!playerContainerRef.current) return;
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    } else {
+      playerContainerRef.current.requestFullscreen().catch(() => {});
+    }
+  };
+
+  // Reload iframe
+  const handleReload = () => {
+    if (!game) return;
+    setIsLoadingIframe(true);
+    if (iframeRef.current) {
+      iframeRef.current.src = game.embedUrl;
+    }
+  };
+
+  // Copy share URL
+  const handleCopyShare = () => {
+    if (typeof window !== 'undefined') {
+      navigator.clipboard.writeText(window.location.href);
+      setCopiedShare(true);
+      setTimeout(() => setCopiedShare(false), 2500);
+    }
+  };
+
+  // Toggle favorite
+  const handleToggleFavorite = () => {
+    if (!game) return;
+    try {
+      const favsJson = localStorage.getItem('timeless_favorites');
+      let favs: string[] = favsJson ? JSON.parse(favsJson) : [];
+      if (isFavorited) {
+        favs = favs.filter((s) => s !== game.slug);
+        setIsFavorited(false);
+      } else {
+        favs.push(game.slug);
+        setIsFavorited(true);
+      }
+      localStorage.setItem('timeless_favorites', JSON.stringify(favs));
+      window.dispatchEvent(new Event('favorites_updated'));
+    } catch {
+      // ignore
+    }
+  };
+
+  // Vote handler
+  const handleVote = (type: 'like' | 'dislike') => {
+    if (userVote === type) {
+      setUserVote(null);
+      if (type === 'like') setLikesCount((c) => c - 1);
+      else setDislikesCount((c) => c - 1);
+    } else {
+      if (userVote === 'like') setLikesCount((c) => c - 1);
+      if (userVote === 'dislike') setDislikesCount((c) => c - 1);
+
+      setUserVote(type);
+      if (type === 'like') setLikesCount((c) => c + 1);
+      else setDislikesCount((c) => c + 1);
+    }
+  };
+
+  // Community reaction handler
+  const handleReaction = (type: string) => {
+    if (userReaction === type) {
+      setUserReaction(null);
+      setReactions((prev) => ({ ...prev, [type]: Math.max(0, (prev[type] || 0) - 1) }));
+    } else {
+      if (userReaction) {
+        setReactions((prev) => ({ ...prev, [userReaction]: Math.max(0, (prev[userReaction] || 0) - 1) }));
+      }
+      setUserReaction(type);
+      setReactions((prev) => ({ ...prev, [type]: (prev[type] || 0) + 1 }));
+    }
+  };
+
+  // Keyboard shortcut listener (Must be called before any early returns to obey React Rules of Hooks)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is typing in an input
+      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) return;
+
+      if (e.key === 'f' || e.key === 'F') {
+        handleFullscreen();
+      } else if (e.key === 'l' || e.key === 'L') {
+        setIsCinemaDimmed((prev) => !prev);
+      } else if (e.key === 't' || e.key === 'T') {
+        setIsTheaterMode((prev) => !prev);
+      } else if (e.key === 'c' || e.key === 'C') {
+        setShowControlsHUD((prev) => !prev);
+      } else if (e.key === 'Escape') {
+        setIsCinemaDimmed(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   if (isDeleted) {
     return (
       <div className="min-h-screen bg-[#0F0F1A] text-white flex flex-col items-center justify-center p-6 text-center">
@@ -182,103 +283,6 @@ export default function GamePage() {
       </div>
     );
   }
-
-  // Toggle favorite
-  const handleToggleFavorite = () => {
-    try {
-      const favsJson = localStorage.getItem('timeless_favorites');
-      let favs: string[] = favsJson ? JSON.parse(favsJson) : [];
-      if (isFavorited) {
-        favs = favs.filter((s) => s !== game.slug);
-        setIsFavorited(false);
-      } else {
-        favs.push(game.slug);
-        setIsFavorited(true);
-      }
-      localStorage.setItem('timeless_favorites', JSON.stringify(favs));
-      window.dispatchEvent(new Event('favorites_updated'));
-    } catch {
-      // ignore
-    }
-  };
-
-  // Vote handler
-  const handleVote = (type: 'like' | 'dislike') => {
-    if (userVote === type) {
-      setUserVote(null);
-      if (type === 'like') setLikesCount((c) => c - 1);
-      else setDislikesCount((c) => c - 1);
-    } else {
-      if (userVote === 'like') setLikesCount((c) => c - 1);
-      if (userVote === 'dislike') setDislikesCount((c) => c - 1);
-
-      setUserVote(type);
-      if (type === 'like') setLikesCount((c) => c + 1);
-      else setDislikesCount((c) => c + 1);
-    }
-  };
-
-  // Keyboard shortcut listener
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if user is typing in an input
-      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) return;
-
-      if (e.key === 'f' || e.key === 'F') {
-        handleFullscreen();
-      } else if (e.key === 'l' || e.key === 'L') {
-        setIsCinemaDimmed((prev) => !prev);
-      } else if (e.key === 't' || e.key === 'T') {
-        setIsTheaterMode((prev) => !prev);
-      } else if (e.key === 'c' || e.key === 'C') {
-        setShowControlsHUD((prev) => !prev);
-      } else if (e.key === 'Escape') {
-        setIsCinemaDimmed(false);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  // Handle community reaction
-  const handleReaction = (type: string) => {
-    if (userReaction === type) {
-      setUserReaction(null);
-      setReactions((prev) => ({ ...prev, [type]: Math.max(0, (prev[type] || 0) - 1) }));
-    } else {
-      if (userReaction) {
-        setReactions((prev) => ({ ...prev, [userReaction]: Math.max(0, (prev[userReaction] || 0) - 1) }));
-      }
-      setUserReaction(type);
-      setReactions((prev) => ({ ...prev, [type]: (prev[type] || 0) + 1 }));
-    }
-  };
-
-  // Fullscreen trigger
-  const handleFullscreen = () => {
-    if (!playerContainerRef.current) return;
-    if (document.fullscreenElement) {
-      document.exitFullscreen().catch(() => {});
-    } else {
-      playerContainerRef.current.requestFullscreen().catch(() => {});
-    }
-  };
-
-  // Reload iframe
-  const handleReload = () => {
-    setIsLoadingIframe(true);
-    if (iframeRef.current) {
-      iframeRef.current.src = game.embedUrl;
-    }
-  };
-
-  // Copy share URL
-  const handleCopyShare = () => {
-    navigator.clipboard.writeText(window.location.href);
-    setCopiedShare(true);
-    setTimeout(() => setCopiedShare(false), 2500);
-  };
 
   // Related games from active catalog
   const activeGames = getActiveGames(deletedIds);
