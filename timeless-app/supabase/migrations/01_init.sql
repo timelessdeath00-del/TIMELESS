@@ -177,64 +177,81 @@ alter table public.play_history enable row level security;
 alter table public.game_votes enable row level security;
 
 -- Profiles: Public read, owner insert & update
+drop policy if exists "Public profiles are viewable by everyone" on public.profiles;
 create policy "Public profiles are viewable by everyone" on public.profiles
   for select using (true);
 
+drop policy if exists "Users can insert own profile" on public.profiles;
 create policy "Users can insert own profile" on public.profiles
   for insert with check (auth.uid() = id);
 
+drop policy if exists "Users can update own profile" on public.profiles;
 create policy "Users can update own profile" on public.profiles
   for update using (auth.uid() = id);
 
 -- Categories: Public read
+drop policy if exists "Categories are viewable by everyone" on public.categories;
 create policy "Categories are viewable by everyone" on public.categories
   for select using (true);
 
 -- Games: Public read published games, Admins full access
+drop policy if exists "Published games viewable by everyone" on public.games;
 create policy "Published games viewable by everyone" on public.games
   for select using (is_published = true);
 
+drop policy if exists "Admins can insert games" on public.games;
 create policy "Admins can insert games" on public.games
   for insert with check (
     exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
   );
 
+drop policy if exists "Admins can update games" on public.games;
 create policy "Admins can update games" on public.games
   for update using (
     exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
   );
 
+drop policy if exists "Admins can delete games" on public.games;
 create policy "Admins can delete games" on public.games
   for delete using (
     exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
   );
 
 -- Favorites: Users manage their own
+drop policy if exists "Users can view own favorites" on public.favorites;
 create policy "Users can view own favorites" on public.favorites
   for select using (auth.uid() = user_id);
 
+drop policy if exists "Users can add favorites" on public.favorites;
 create policy "Users can add favorites" on public.favorites
   for insert with check (auth.uid() = user_id);
 
+drop policy if exists "Users can remove favorites" on public.favorites;
 create policy "Users can remove favorites" on public.favorites
   for delete using (auth.uid() = user_id);
 
 -- Play History: Users manage their own
+drop policy if exists "Users can view own history" on public.play_history;
 create policy "Users can view own history" on public.play_history
   for select using (auth.uid() = user_id);
 
+drop policy if exists "Users can insert own history" on public.play_history;
 create policy "Users can insert own history" on public.play_history
   for insert with check (auth.uid() = user_id);
 
+drop policy if exists "Users can update own history" on public.play_history;
 create policy "Users can update own history" on public.play_history
   for update using (auth.uid() = user_id);
 
 -- Game Votes: Users manage their own
+drop policy if exists "Users can view all votes" on public.game_votes;
 create policy "Users can view all votes" on public.game_votes
   for select using (true);
 
+drop policy if exists "Users can cast votes" on public.game_votes;
 create policy "Users can cast votes" on public.game_votes
   for insert with check (auth.uid() = user_id);
 
+drop policy if exists "Users can update votes" on public.game_votes;
 create policy "Users can update votes" on public.game_votes
   for update using (auth.uid() = user_id);
