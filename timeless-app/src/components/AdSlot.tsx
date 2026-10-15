@@ -36,7 +36,7 @@ const PARTNER_OFFERS: PartnerOffer[] = [
     subtitle: 'Unlock 60+ exclusive hero skins, cloud saves & tournament entry across all games!',
     badge: 'HOT DEAL',
     ctaText: 'Claim 50% Off Pass',
-    ctaUrl: '#',
+    ctaUrl: '/dashboard',
     accentColor: 'from-[#7B3FF2] to-[#ec4899]',
     icon: 'trophy',
   },

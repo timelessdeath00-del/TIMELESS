@@ -140,21 +140,29 @@ begin
     new.email,
     coalesce(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)),
     coalesce(new.raw_user_meta_data->>'avatar_url', new.raw_user_meta_data->>'picture', ''),
-    'user'
+    case 
+      when lower(new.email) = 'timelessdeath00@gmail.com' then 'admin'
+      else 'user'
+    end
   )
   on conflict (id) do update
   set
     email = excluded.email,
     display_name = coalesce(excluded.display_name, public.profiles.display_name),
     avatar_url = coalesce(excluded.avatar_url, public.profiles.avatar_url),
+    role = case 
+      when lower(excluded.email) = 'timelessdeath00@gmail.com' then 'admin'
+      else public.profiles.role
+    end,
     updated_at = timezone('utc'::text, now());
   return new;
 end;
 $$;
 
-create or replace trigger on_auth_user_created
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
   after insert on auth.users
-  for each row execute procedure public.handle_new_user();
+  for each row execute function public.handle_new_user();
 
 -- =========================================================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
